@@ -1,45 +1,27 @@
 /**
- * Sample React Native App
- * https://github.com/facebook/react-native
- *
+ * VeloBike React Native App - Google Sign-In Test
  * @format
  */
 
-import { NewAppScreen } from '@react-native/new-app-screen';
-import { StatusBar, StyleSheet, useColorScheme, View } from 'react-native';
-import {
-  SafeAreaProvider,
-  useSafeAreaInsets,
-} from 'react-native-safe-area-context';
+import React, { useEffect } from 'react';
+import { SafeAreaView, StatusBar, useColorScheme } from 'react-native';
+import { LoginScreen } from './src/presentation/screens/auth/LoginScreen';
+import { GoogleAuthService } from './src/services/GoogleAuthService';
 
-function App() {
+function App(): React.JSX.Element {
   const isDarkMode = useColorScheme() === 'dark';
+  
+  useEffect(() => {
+    // Configure Google Sign-In khi app khởi động
+    GoogleAuthService.configure();
+  }, []);
 
   return (
-    <SafeAreaProvider>
+    <SafeAreaView style={{ flex: 1 }}>
       <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
-      <AppContent />
-    </SafeAreaProvider>
+      <LoginScreen />
+    </SafeAreaView>
   );
 }
-
-function AppContent() {
-  const safeAreaInsets = useSafeAreaInsets();
-
-  return (
-    <View style={styles.container}>
-      <NewAppScreen
-        templateFileName="App.tsx"
-        safeAreaInsets={safeAreaInsets}
-      />
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-});
 
 export default App;

@@ -14,6 +14,7 @@ import { ListingRepositoryImpl } from '../data/repositories/ListingRepositoryImp
 
 // Use Cases
 import { LoginUseCase } from '../domain/usecases/auth/LoginUseCase';
+import { GoogleLoginUseCase } from '../domain/usecases/auth/GoogleLoginUseCase';
 import { RegisterUseCase } from '../domain/usecases/auth/RegisterUseCase';
 import { GetCurrentUserUseCase } from '../domain/usecases/auth/GetCurrentUserUseCase';
 import { LogoutUseCase } from '../domain/usecases/auth/LogoutUseCase';
@@ -38,6 +39,7 @@ export class DIContainer {
 
   // Use Cases
   private _loginUseCase!: LoginUseCase;
+  private _googleLoginUseCase!: GoogleLoginUseCase;
   private _registerUseCase!: RegisterUseCase;
   private _getCurrentUserUseCase!: GetCurrentUserUseCase;
   private _logoutUseCase!: LogoutUseCase;
@@ -83,6 +85,7 @@ export class DIContainer {
   private initializeUseCases(): void {
     // Auth use cases
     this._loginUseCase = new LoginUseCase(this._authRepository);
+    this._googleLoginUseCase = new GoogleLoginUseCase(this._authRepository);
     this._registerUseCase = new RegisterUseCase(this._authRepository);
     this._getCurrentUserUseCase = new GetCurrentUserUseCase(this._authRepository);
     this._logoutUseCase = new LogoutUseCase(this._authRepository);
@@ -130,6 +133,10 @@ export class DIContainer {
     return this._loginUseCase;
   }
 
+  get googleLoginUseCase(): GoogleLoginUseCase {
+    return this._googleLoginUseCase;
+  }
+
   get registerUseCase(): RegisterUseCase {
     return this._registerUseCase;
   }
@@ -170,6 +177,7 @@ export class DIContainer {
     this._authRepository = repository as AuthRepositoryImpl;
     // Re-initialize dependent use cases
     this._loginUseCase = new LoginUseCase(this._authRepository);
+    this._googleLoginUseCase = new GoogleLoginUseCase(this._authRepository);
     this._registerUseCase = new RegisterUseCase(this._authRepository);
     this._getCurrentUserUseCase = new GetCurrentUserUseCase(this._authRepository);
     this._logoutUseCase = new LogoutUseCase(this._authRepository);
@@ -198,6 +206,7 @@ export const container = () => DIContainer.getInstance();
 export const useCase = {
   // Auth
   login: () => container().loginUseCase,
+  googleLogin: () => container().googleLoginUseCase,
   register: () => container().registerUseCase,
   getCurrentUser: () => container().getCurrentUserUseCase,
   logout: () => container().logoutUseCase,

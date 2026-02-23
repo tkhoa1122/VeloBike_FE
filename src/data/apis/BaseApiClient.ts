@@ -1,4 +1,5 @@
 import { API_CONFIG } from '../../config/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 /**
  * Base API Client with common functionality
@@ -51,25 +52,35 @@ export class BaseApiClient {
    * Get stored auth token
    */
   protected async getStoredToken(): Promise<string | null> {
-    // This will be implemented with AsyncStorage in React Native
-    // For now, return null as placeholder
-    return null;
+    try {
+      const token = await AsyncStorage.getItem('auth_token');
+      return token;
+    } catch (error) {
+      console.warn('Error getting stored token:', error);
+      return null;
+    }
   }
 
   /**
    * Store auth token
    */
   protected async setStoredToken(token: string): Promise<void> {
-    // This will be implemented with AsyncStorage in React Native
-    console.log('Token to be stored:', token);
+    try {
+      await AsyncStorage.setItem('auth_token', token);
+    } catch (error) {
+      console.warn('Error storing token:', error);
+    }
   }
 
   /**
    * Clear auth token
    */
   protected async clearStoredToken(): Promise<void> {
-    // This will be implemented with AsyncStorage in React Native
-    console.log('Token cleared');
+    try {
+      await AsyncStorage.removeItem('auth_token');
+    } catch (error) {
+      console.warn('Error clearing token:', error);
+    }
   }
 
   /**

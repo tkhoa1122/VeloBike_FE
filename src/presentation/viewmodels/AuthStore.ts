@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { User, LoginCredentials, RegisterData } from '../../domain/entities/User';
 import { useCase } from '../../di/Container';
 import { LoadingState } from '../../domain/entities/Common';
+import { GoogleAuthService } from '../../services/GoogleAuthService';
 
 interface AuthState {
   // State
@@ -12,6 +13,7 @@ interface AuthState {
   
   // Actions
   login: (credentials: LoginCredentials) => Promise<boolean>;
+  googleLogin: () => Promise<boolean>;
   register: (data: RegisterData) => Promise<boolean>;
   logout: () => Promise<void>;
   getCurrentUser: () => Promise<void>;
@@ -63,7 +65,52 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       return false;
     }
   },
+  googleLogin: async (): Promise<boolean> => {
+    set({ loadingState: 'loading', error: null });
+    
+    try {
+      // Step 1: Google Sign-In
+      const googleResult = await GoogleAuthService.signIn();
+      if (!googleResult) {
+        set({ 
+          loadingState: 'error', 
+          error: 'Google sign-in cancelled or failed',
+          isAuthenticated: false,
+          user: null 
+        });
+        return false;
+      }
 
+      // Step 2: Send ID token to backend
+      const result = await useCase.googleLogin().execute(googleResult.idToken);
+      
+      if (result.success && result.data) {
+        set({ 
+          loadingState: 'success',
+          user: result.data.user,
+          isAuthenticated: true,
+          error: null 
+        });
+        return true;
+      } else {
+        set({ 
+          loadingState: 'error', 
+          error: result.message,
+          isAuthenticated: false,
+          user: null 
+        });
+        return false;
+      }
+    } catch (error) {
+      set({ 
+        loadingState: 'error', 
+        error: error instanceof Error ? error.message : 'Google login failed',
+        isAuthenticated: false,
+        user: null 
+      });
+      return false;
+    }
+  },
   register: async (data: RegisterData): Promise<boolean> => {
     set({ loadingState: 'loading', error: null });
     
@@ -104,7 +151,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         loadingState: 'idle',
         error: null 
       });
-    } catch (error) {
+    } catch {
       // Even if logout fails on server, clear local state
       set({ 
         user: null,

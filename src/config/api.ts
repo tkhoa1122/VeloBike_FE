@@ -1,10 +1,10 @@
 /**
  * API Configuration
  */
+import { ENV } from './environment';
+
 export const API_CONFIG = {
-  BASE_URL: __DEV__ 
-    ? 'http://localhost:8000/api'
-    : 'https://api.velobike.com/api',
+  BASE_URL: ENV.API_BASE_URL,
   
   TIMEOUT: 30000, // 30 seconds
   

@@ -110,6 +110,9 @@ android {
 dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
+    
+    // Google Play Services for authentication
+    implementation("com.google.android.gms:play-services-auth:20.7.0")
 
     if (hermesEnabled.toBoolean()) {
         implementation("com.facebook.react:hermes-android")
@@ -117,3 +120,6 @@ dependencies {
         implementation jscFlavor
     }
 }
+
+// Apply Google Services plugin (must be at the end)
+apply plugin: 'com.google.gms.google-services'

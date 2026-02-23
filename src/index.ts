@@ -31,6 +31,7 @@ export * from './domain/repositories/PaymentRepository';
 
 // Use Cases
 export * from './domain/usecases/auth/LoginUseCase';
+export * from './domain/usecases/auth/GoogleLoginUseCase';
 export * from './domain/usecases/auth/RegisterUseCase';
 export * from './domain/usecases/auth/GetCurrentUserUseCase';
 export * from './domain/usecases/auth/LogoutUseCase';
@@ -66,6 +67,12 @@ export * from './presentation/viewmodels/ListingStore';
 export * from './presentation/viewmodels/AppStore';
 
 // =============================================================================
+// SERVICES EXPORTS
+// =============================================================================
+
+export * from './services/GoogleAuthService';
+
+// =============================================================================
 // DEPENDENCY INJECTION EXPORTS
 // =============================================================================
 
@@ -78,6 +85,7 @@ export * from './di/Container';
 // Configuration
 export * from './config/api';
 export * from './config/constants';
+export * from './config/environment';
 
 // Utilities
 export * from './utils/formatters';
@@ -125,6 +133,11 @@ export {
 } from './config/constants';
 
 export {
+  ENV,
+  APP_FEATURES,
+} from './config/environment';
+
+export {
   // Common Formatters
   formatCurrency,
   formatDate,
@@ -149,6 +162,11 @@ export {
   isEmpty,
   calculateDistance,
 } from './utils/helpers';
+
+export {
+  // Google Auth Service
+  GoogleAuthService,
+} from './services/GoogleAuthService';
 
 export default {
   // Domain
