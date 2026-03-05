@@ -23,10 +23,18 @@ export const ENDPOINTS = {
     REGISTER: '/auth/register',
     LOGIN: '/auth/login',
     GOOGLE_LOGIN: '/auth/google',
+    REFRESH_TOKEN: '/auth/refresh-token',
     VERIFY_EMAIL: '/auth/verify-email',
     ME: '/auth/me',
     PROFILE: '/auth/profile',
+    // UPLOAD_AVATAR: '/auth/upload-avatar', // TODO: BE chưa có route
+    CHANGE_PASSWORD: '/auth/change-password',
+    FORGOT_PASSWORD: '/auth/forgot-password',
+    RESET_PASSWORD: '/auth/reset-password',
     KYC_UPLOAD: '/auth/kyc-upload',
+    LOGOUT: '/auth/logout',
+    RESEND_VERIFICATION: '/auth/resend-verification',
+    PUSH_TOKEN: '/auth/push-token',
   },
   
   // Listings
@@ -66,6 +74,7 @@ export const ENDPOINTS = {
     SEND: '/messages',
     LIST: (conversationId: string) => `/messages/list/${conversationId}`,
     CONVERSATIONS: '/messages/conversations',
+    MARK_READ: (messageId: string) => `/messages/${messageId}/read`,
   },
   
   // Wishlist
@@ -74,6 +83,7 @@ export const ENDPOINTS = {
     LIST: '/wishlist',
     CHECK: (listingId: string) => `/wishlist/check/${listingId}`,
     REMOVE: (listingId: string) => `/wishlist/${listingId}`,
+    COUNT: '/wishlist/count',
     CLEAR: '/wishlist/clear',
   },
   
@@ -87,7 +97,11 @@ export const ENDPOINTS = {
   
   // Other endpoints...
   REVIEWS: '/reviews',
-  NOTIFICATIONS: '/notifications',
+  NOTIFICATIONS: {
+    LIST: '/notifications',
+    MARK_READ: (id: string) => `/notifications/${id}/read`,
+    MARK_ALL_READ: '/notifications/read-all',
+  },
   ANALYTICS: {
     SELLER: '/analytics/seller/dashboard',
     PERFORMANCE: '/analytics/seller/performance',
@@ -123,6 +137,7 @@ export const SOCKET_EVENTS = {
   
   // Emit events
   JOIN_CONVERSATION: 'joinConversation',
+  JOIN_ORDER: 'joinOrder',
   TYPING: 'typing',
-  TYPING_STOP: 'typingStop',
+  ONLINE: 'online',
 } as const;

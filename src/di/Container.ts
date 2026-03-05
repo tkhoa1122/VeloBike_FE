@@ -7,10 +7,17 @@
 import { AuthApiClient } from '../data/apis/AuthApiClient';
 import { ListingApiClient } from '../data/apis/ListingApiClient';
 import { OrderApiClient } from '../data/apis/OrderApiClient';
+import { WishlistApiClient } from '../data/apis/WishlistApiClient';
+import { MessageApiClient } from '../data/apis/MessageApiClient';
+import { NotificationApiClient } from '../data/apis/NotificationApiClient';
 
 // Repository Implementations
 import { AuthRepositoryImpl } from '../data/repositories/AuthRepositoryImpl';
 import { ListingRepositoryImpl } from '../data/repositories/ListingRepositoryImpl';
+import { OrderRepositoryImpl } from '../data/repositories/OrderRepositoryImpl';
+import { WishlistRepositoryImpl } from '../data/repositories/WishlistRepositoryImpl';
+import { MessageRepositoryImpl } from '../data/repositories/MessageRepositoryImpl';
+import { NotificationRepositoryImpl } from '../data/repositories/NotificationRepositoryImpl';
 
 // Use Cases
 import { LoginUseCase } from '../domain/usecases/auth/LoginUseCase';
@@ -18,6 +25,8 @@ import { GoogleLoginUseCase } from '../domain/usecases/auth/GoogleLoginUseCase';
 import { RegisterUseCase } from '../domain/usecases/auth/RegisterUseCase';
 import { GetCurrentUserUseCase } from '../domain/usecases/auth/GetCurrentUserUseCase';
 import { LogoutUseCase } from '../domain/usecases/auth/LogoutUseCase';
+import { VerifyEmailUseCase } from '../domain/usecases/auth/VerifyEmailUseCase';
+import { ResendVerificationUseCase } from '../domain/usecases/auth/ResendVerificationUseCase';
 import { GetListingsUseCase } from '../domain/usecases/listings/GetListingsUseCase';
 import { CreateListingUseCase } from '../domain/usecases/listings/CreateListingUseCase';
 
@@ -32,10 +41,17 @@ export class DIContainer {
   private _authApiClient!: AuthApiClient;
   private _listingApiClient!: ListingApiClient;
   private _orderApiClient!: OrderApiClient;
+  private _wishlistApiClient!: WishlistApiClient;
+  private _messageApiClient!: MessageApiClient;
+  private _notificationApiClient!: NotificationApiClient;
 
   // Repository Implementations
   private _authRepository!: AuthRepositoryImpl;
   private _listingRepository!: ListingRepositoryImpl;
+  private _orderRepository!: OrderRepositoryImpl;
+  private _wishlistRepository!: WishlistRepositoryImpl;
+  private _messageRepository!: MessageRepositoryImpl;
+  private _notificationRepository!: NotificationRepositoryImpl;
 
   // Use Cases
   private _loginUseCase!: LoginUseCase;
@@ -43,6 +59,8 @@ export class DIContainer {
   private _registerUseCase!: RegisterUseCase;
   private _getCurrentUserUseCase!: GetCurrentUserUseCase;
   private _logoutUseCase!: LogoutUseCase;
+  private _verifyEmailUseCase!: VerifyEmailUseCase;
+  private _resendVerificationUseCase!: ResendVerificationUseCase;
   private _getListingsUseCase!: GetListingsUseCase;
   private _createListingUseCase!: CreateListingUseCase;
 
@@ -69,6 +87,9 @@ export class DIContainer {
     this._authApiClient = new AuthApiClient();
     this._listingApiClient = new ListingApiClient();
     this._orderApiClient = new OrderApiClient();
+    this._wishlistApiClient = new WishlistApiClient();
+    this._messageApiClient = new MessageApiClient();
+    this._notificationApiClient = new NotificationApiClient();
   }
 
   /**
@@ -77,6 +98,10 @@ export class DIContainer {
   private initializeRepositories(): void {
     this._authRepository = new AuthRepositoryImpl(this._authApiClient);
     this._listingRepository = new ListingRepositoryImpl(this._listingApiClient);
+    this._orderRepository = new OrderRepositoryImpl(this._orderApiClient);
+    this._wishlistRepository = new WishlistRepositoryImpl(this._wishlistApiClient);
+    this._messageRepository = new MessageRepositoryImpl(this._messageApiClient);
+    this._notificationRepository = new NotificationRepositoryImpl(this._notificationApiClient);
   }
 
   /**
@@ -89,6 +114,8 @@ export class DIContainer {
     this._registerUseCase = new RegisterUseCase(this._authRepository);
     this._getCurrentUserUseCase = new GetCurrentUserUseCase(this._authRepository);
     this._logoutUseCase = new LogoutUseCase(this._authRepository);
+    this._verifyEmailUseCase = new VerifyEmailUseCase(this._authRepository);
+    this._resendVerificationUseCase = new ResendVerificationUseCase(this._authRepository);
 
     // Listing use cases
     this._getListingsUseCase = new GetListingsUseCase(this._listingRepository);
@@ -128,6 +155,22 @@ export class DIContainer {
     return this._listingRepository;
   }
 
+  get orderRepository(): OrderRepositoryImpl {
+    return this._orderRepository;
+  }
+
+  get wishlistRepository(): WishlistRepositoryImpl {
+    return this._wishlistRepository;
+  }
+
+  get messageRepository(): MessageRepositoryImpl {
+    return this._messageRepository;
+  }
+
+  get notificationRepository(): NotificationRepositoryImpl {
+    return this._notificationRepository;
+  }
+
   // Auth Use Cases
   get loginUseCase(): LoginUseCase {
     return this._loginUseCase;
@@ -147,6 +190,14 @@ export class DIContainer {
 
   get logoutUseCase(): LogoutUseCase {
     return this._logoutUseCase;
+  }
+
+  get verifyEmailUseCase(): VerifyEmailUseCase {
+    return this._verifyEmailUseCase;
+  }
+
+  get resendVerificationUseCase(): ResendVerificationUseCase {
+    return this._resendVerificationUseCase;
   }
 
   // Listing Use Cases
@@ -181,6 +232,8 @@ export class DIContainer {
     this._registerUseCase = new RegisterUseCase(this._authRepository);
     this._getCurrentUserUseCase = new GetCurrentUserUseCase(this._authRepository);
     this._logoutUseCase = new LogoutUseCase(this._authRepository);
+    this._verifyEmailUseCase = new VerifyEmailUseCase(this._authRepository);
+    this._resendVerificationUseCase = new ResendVerificationUseCase(this._authRepository);
   }
 
   registerListingRepository(repository: ListingRepository): void {
@@ -210,10 +263,16 @@ export const useCase = {
   register: () => container().registerUseCase,
   getCurrentUser: () => container().getCurrentUserUseCase,
   logout: () => container().logoutUseCase,
+  verifyEmail: () => container().verifyEmailUseCase,
+  resendVerification: () => container().resendVerificationUseCase,
   
   // Listings
   getListings: () => container().getListingsUseCase,
   createListing: () => container().createListingUseCase,
+
+  // Direct repository access (for methods without dedicated use cases)
+  listing: () => container().listingRepository,
+  auth: () => container().authRepository,
 };
 
 /**
@@ -222,6 +281,10 @@ export const useCase = {
 export const repository = {
   auth: () => container().authRepository,
   listing: () => container().listingRepository,
+  order: () => container().orderRepository,
+  wishlist: () => container().wishlistRepository,
+  message: () => container().messageRepository,
+  notification: () => container().notificationRepository,
 };
 
 export default DIContainer;

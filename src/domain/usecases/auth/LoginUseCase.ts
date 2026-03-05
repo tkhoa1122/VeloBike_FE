@@ -5,7 +5,7 @@ import { ApiResponse } from '../../entities/Common';
 export class LoginUseCase {
   constructor(private authRepository: AuthRepository) {}
 
-  async execute(credentials: LoginCredentials): Promise<ApiResponse<{ token: string; user: User }>> {
+  async execute(credentials: LoginCredentials): Promise<ApiResponse<{ accessToken: string; refreshToken: string; user: User }>> {
     // Validation
     if (!credentials.email || !credentials.password) {
       return {
@@ -35,8 +35,8 @@ export class LoginUseCase {
       const result = await this.authRepository.login(credentials);
       
       if (result.success && result.data) {
-        // Store token
-        await this.authRepository.setStoredToken(result.data.token);
+        // Store dual tokens (accessToken + refreshToken)
+        await this.authRepository.setStoredTokens(result.data.accessToken, result.data.refreshToken);
       }
       
       return result;

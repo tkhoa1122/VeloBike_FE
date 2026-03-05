@@ -60,7 +60,8 @@ export interface UserModel {
 // Auth response models
 export interface LoginResponseModel {
   success: boolean;
-  token: string;
+  accessToken: string;
+  refreshToken: string;
   user: UserModel;
   message?: string;
 }
@@ -68,6 +69,33 @@ export interface LoginResponseModel {
 export interface RegisterResponseModel {
   success: boolean;
   message: string;
+  user?: {
+    id: string;
+    email: string;
+    fullName: string;
+    role: string;
+    emailVerified: boolean;
+  };
+}
+
+export interface VerifyEmailResponseModel {
+  success: boolean;
+  message: string;
+  accessToken?: string;
+  refreshToken?: string;
+  user?: UserModel;
+}
+
+export interface RefreshTokenResponseModel {
+  success: boolean;
+  accessToken: string;
+  user?: UserModel;
+}
+
+export interface AvatarUploadResponseModel {
+  success: boolean;
+  message: string;
+  avatarUrl?: string;
 }
 
 export interface ProfileResponseModel {

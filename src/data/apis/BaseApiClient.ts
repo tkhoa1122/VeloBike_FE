@@ -1,12 +1,21 @@
-import { API_CONFIG } from '../../config/api';
+import { API_CONFIG, ENDPOINTS } from '../../config/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// Storage keys
+const STORAGE_KEYS = {
+  ACCESS_TOKEN: 'access_token',
+  REFRESH_TOKEN: 'refresh_token',
+} as const;
 
 /**
  * Base API Client with common functionality
+ * Supports dual token (accessToken + refreshToken) and auto-refresh on 401
  */
 export class BaseApiClient {
   protected baseURL: string;
   protected timeout: number;
+  private isRefreshing: boolean = false;
+  private refreshPromise: Promise<boolean> | null = null;
 
   constructor() {
     this.baseURL = API_CONFIG.BASE_URL;
@@ -22,8 +31,7 @@ export class BaseApiClient {
       Accept: 'application/json',
     };
 
-    // Add authorization header if token exists
-    const token = await this.getStoredToken();
+    const token = await this.getStoredAccessToken();
     if (token) {
       headers.Authorization = `Bearer ${token}`;
     }
@@ -37,10 +45,10 @@ export class BaseApiClient {
   protected async getUploadHeaders(): Promise<Record<string, string>> {
     const headers: Record<string, string> = {
       Accept: 'application/json',
-      // Don't set Content-Type for FormData - browser will set it with boundary
+      // Don't set Content-Type for FormData - RN will set it with boundary
     };
 
-    const token = await this.getStoredToken();
+    const token = await this.getStoredAccessToken();
     if (token) {
       headers.Authorization = `Bearer ${token}`;
     }
@@ -48,47 +56,145 @@ export class BaseApiClient {
     return headers;
   }
 
+  // =========================================================================
+  // TOKEN MANAGEMENT - Dual token (accessToken + refreshToken)
+  // =========================================================================
+
   /**
-   * Get stored auth token
+   * Get stored access token
    */
-  protected async getStoredToken(): Promise<string | null> {
+  async getStoredAccessToken(): Promise<string | null> {
     try {
-      const token = await AsyncStorage.getItem('auth_token');
-      return token;
+      return await AsyncStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
     } catch (error) {
-      console.warn('Error getting stored token:', error);
+      console.warn('Error getting access token:', error);
       return null;
     }
   }
 
   /**
-   * Store auth token
+   * Get stored refresh token
    */
+  async getStoredRefreshToken(): Promise<string | null> {
+    try {
+      return await AsyncStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN);
+    } catch (error) {
+      console.warn('Error getting refresh token:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Store both tokens after login/refresh
+   */
+  async setStoredTokens(accessToken: string, refreshToken?: string): Promise<void> {
+    try {
+      await AsyncStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, accessToken);
+      if (refreshToken) {
+        await AsyncStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, refreshToken);
+      }
+    } catch (error) {
+      console.warn('Error storing tokens:', error);
+    }
+  }
+
+  /**
+   * Clear all stored tokens (logout)
+   */
+  async clearStoredTokens(): Promise<void> {
+    try {
+      await AsyncStorage.multiRemove([
+        STORAGE_KEYS.ACCESS_TOKEN,
+        STORAGE_KEYS.REFRESH_TOKEN,
+      ]);
+    } catch (error) {
+      console.warn('Error clearing tokens:', error);
+    }
+  }
+
+  // Legacy aliases for backward compatibility
+  protected async getStoredToken(): Promise<string | null> {
+    return this.getStoredAccessToken();
+  }
+
   protected async setStoredToken(token: string): Promise<void> {
-    try {
-      await AsyncStorage.setItem('auth_token', token);
-    } catch (error) {
-      console.warn('Error storing token:', error);
-    }
+    await this.setStoredTokens(token);
   }
 
-  /**
-   * Clear auth token
-   */
   protected async clearStoredToken(): Promise<void> {
+    await this.clearStoredTokens();
+  }
+
+  // =========================================================================
+  // AUTO-REFRESH TOKEN LOGIC
+  // =========================================================================
+
+  /**
+   * Attempt to refresh the access token using the stored refresh token.
+   * Uses a single-flight pattern to prevent multiple concurrent refresh calls.
+   */
+  private async attemptTokenRefresh(): Promise<boolean> {
+    // If already refreshing, wait for the existing refresh to complete
+    if (this.isRefreshing && this.refreshPromise) {
+      return this.refreshPromise;
+    }
+
+    this.isRefreshing = true;
+    this.refreshPromise = this._doRefresh();
+
     try {
-      await AsyncStorage.removeItem('auth_token');
-    } catch (error) {
-      console.warn('Error clearing token:', error);
+      return await this.refreshPromise;
+    } finally {
+      this.isRefreshing = false;
+      this.refreshPromise = null;
     }
   }
 
+  private async _doRefresh(): Promise<boolean> {
+    try {
+      const refreshToken = await this.getStoredRefreshToken();
+      if (!refreshToken) {
+        return false;
+      }
+
+      const url = `${this.baseURL}${ENDPOINTS.AUTH.REFRESH_TOKEN}`;
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({ refreshToken }),
+      });
+
+      if (!response.ok) {
+        return false;
+      }
+
+      const data = await response.json();
+      if (data.success && data.accessToken) {
+        await this.setStoredTokens(data.accessToken);
+        return true;
+      }
+
+      return false;
+    } catch (error) {
+      console.warn('Token refresh failed:', error);
+      return false;
+    }
+  }
+
+  // =========================================================================
+  // HTTP REQUEST WITH AUTO-REFRESH
+  // =========================================================================
+
   /**
-   * Make HTTP request with error handling
+   * Make HTTP request with error handling and auto-refresh on 401
    */
   protected async request<T = any>(
     endpoint: string,
-    options: RequestInit = {}
+    options: RequestInit = {},
+    _isRetry: boolean = false
   ): Promise<T> {
     const url = `${this.baseURL}${endpoint}`;
     const headers = await this.getHeaders();
@@ -113,7 +219,21 @@ export class BaseApiClient {
 
       clearTimeout(timeoutId);
 
-      // Handle different response types
+      // Handle 401: try refresh token before failing
+      if (response.status === 401 && !_isRetry) {
+        const refreshed = await this.attemptTokenRefresh();
+        if (refreshed) {
+          // Retry the original request with new token
+          return this.request<T>(endpoint, options, true);
+        }
+        // Refresh failed → clear tokens and throw
+        await this.clearStoredTokens();
+        const error = new Error('Phiên đăng nhập đã hết hạn');
+        (error as any).status = 401;
+        throw error;
+      }
+
+      // Handle other error responses
       if (!response.ok) {
         await this.handleErrorResponse(response);
       }
@@ -140,7 +260,7 @@ export class BaseApiClient {
   }
 
   /**
-   * Handle error responses
+   * Handle error responses (non-401, since 401 is handled in request())
    */
   protected async handleErrorResponse(response: Response): Promise<void> {
     let errorMessage = 'Network error occurred';
@@ -151,22 +271,18 @@ export class BaseApiClient {
       errorMessage = errorData.message || errorMessage;
       errorDetails = errorData.errors || null;
     } catch {
-      // If can't parse JSON, use status text
       errorMessage = response.statusText || errorMessage;
     }
 
-    // Handle specific status codes
     switch (response.status) {
-      case 401:
-        // Unauthorized - clear token and redirect
-        await this.clearStoredToken();
-        errorMessage = 'Phiên đăng nhập đã hết hạn';
-        break;
       case 403:
-        errorMessage = 'Bạn không có quyền thực hiện thao tác này';
+        errorMessage = errorMessage || 'Bạn không có quyền thực hiện thao tác này';
         break;
       case 404:
-        errorMessage = 'Không tìm thấy tài nguyên yêu cầu';
+        errorMessage = errorMessage || 'Không tìm thấy tài nguyên yêu cầu';
+        break;
+      case 409:
+        errorMessage = errorMessage || 'Dữ liệu bị trùng lặp';
         break;
       case 422:
         errorMessage = errorMessage || 'Dữ liệu không hợp lệ';

@@ -115,7 +115,7 @@ export interface ListingModel {
 export interface ListingListResponseModel {
   success: boolean;
   count: number;
-  page: number;
+  currentPage: number;
   totalPages: number;
   data: ListingModel[];
   message?: string;

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { User, LoginCredentials, RegisterData } from '../../domain/entities/User';
+import { User, LoginCredentials, RegisterData, UpdateProfileData } from '../../domain/entities/User';
 import { useCase } from '../../di/Container';
 import { LoadingState } from '../../domain/entities/Common';
 import { GoogleAuthService } from '../../services/GoogleAuthService';
@@ -15,8 +15,13 @@ interface AuthState {
   login: (credentials: LoginCredentials) => Promise<boolean>;
   googleLogin: () => Promise<boolean>;
   register: (data: RegisterData) => Promise<boolean>;
+  verifyEmail: (email: string, code: string) => Promise<boolean>;
+  resendVerification: (email: string) => Promise<boolean>;
   logout: () => Promise<void>;
   getCurrentUser: () => Promise<void>;
+  forgotPassword: (email: string) => Promise<boolean>;
+  updateProfile: (data: UpdateProfileData) => Promise<boolean>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<boolean>;
   clearError: () => void;
   
   // UI helpers
@@ -139,6 +144,51 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
+  verifyEmail: async (email: string, code: string): Promise<boolean> => {
+    set({ loadingState: 'loading', error: null });
+
+    try {
+      const result = await useCase.verifyEmail().execute(email, code);
+
+      if (result.success) {
+        // If backend returns user + tokens (auto-login after verify)
+        if (result.data?.user) {
+          set({
+            user: result.data.user,
+            isAuthenticated: true,
+            loadingState: 'success',
+            error: null,
+          });
+        } else {
+          set({ loadingState: 'success', error: null });
+        }
+        return true;
+      } else {
+        set({
+          loadingState: 'error',
+          error: result.message,
+        });
+        return false;
+      }
+    } catch (error) {
+      set({
+        loadingState: 'error',
+        error: error instanceof Error ? error.message : 'Email verification failed',
+      });
+      return false;
+    }
+  },
+
+  resendVerification: async (email: string): Promise<boolean> => {
+    // Don't override main loading state — use separate UX for resend
+    try {
+      const result = await useCase.resendVerification().execute(email);
+      return result.success;
+    } catch {
+      return false;
+    }
+  },
+
   logout: async (): Promise<void> => {
     set({ loadingState: 'loading', error: null });
     
@@ -201,6 +251,57 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   clearError: () => {
     set({ error: null });
+  },
+
+  forgotPassword: async (email: string): Promise<boolean> => {
+    set({ loadingState: 'loading', error: null });
+    try {
+      const result = await useCase.auth().forgotPassword(email);
+      if (result.success) {
+        set({ loadingState: 'success', error: null });
+        return true;
+      } else {
+        set({ loadingState: 'error', error: result.message || 'Không thể gửi email đặt lại mật khẩu' });
+        return false;
+      }
+    } catch (error) {
+      set({ loadingState: 'error', error: error instanceof Error ? error.message : 'Gửi yêu cầu thất bại' });
+      return false;
+    }
+  },
+
+  updateProfile: async (data: UpdateProfileData): Promise<boolean> => {
+    set({ loadingState: 'loading', error: null });
+    try {
+      const result = await useCase.auth().updateProfile(data);
+      if (result.success && result.data) {
+        set({ user: result.data, loadingState: 'success', error: null });
+        return true;
+      } else {
+        set({ loadingState: 'error', error: result.message || 'Cập nhật hồ sơ thất bại' });
+        return false;
+      }
+    } catch (error) {
+      set({ loadingState: 'error', error: error instanceof Error ? error.message : 'Cập nhật thất bại' });
+      return false;
+    }
+  },
+
+  changePassword: async (currentPassword: string, newPassword: string): Promise<boolean> => {
+    set({ loadingState: 'loading', error: null });
+    try {
+      const result = await useCase.auth().changePassword(currentPassword, newPassword);
+      if (result.success) {
+        set({ loadingState: 'success', error: null });
+        return true;
+      } else {
+        set({ loadingState: 'error', error: result.message || 'Đổi mật khẩu thất bại' });
+        return false;
+      }
+    } catch (error) {
+      set({ loadingState: 'error', error: error instanceof Error ? error.message : 'Đổi mật khẩu thất bại' });
+      return false;
+    }
   },
 
   // UI helpers

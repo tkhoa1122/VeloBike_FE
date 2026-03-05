@@ -22,7 +22,7 @@ export class ListingRepositoryImpl implements ListingRepository {
       return {
         success: response.success,
         count: response.count,
-        page: response.page,
+        page: response.currentPage,
         totalPages: response.totalPages,
         data: mappedData,
         message: response.message
@@ -139,7 +139,7 @@ export class ListingRepositoryImpl implements ListingRepository {
       return {
         success: response.success,
         count: response.count,
-        page: response.page,
+        page: response.currentPage,
         totalPages: response.totalPages,
         data: mappedData,
         message: response.message
@@ -227,7 +227,7 @@ export class ListingRepositoryImpl implements ListingRepository {
       return {
         success: response.success,
         count: response.count,
-        page: response.page,
+        page: response.currentPage,
         totalPages: response.totalPages,
         data: mappedData,
         message: response.message

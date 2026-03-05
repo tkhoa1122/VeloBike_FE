@@ -22,16 +22,17 @@ export class AuthRepositoryImpl implements AuthRepository {
     }
   }
 
-  async login(credentials: LoginCredentials): Promise<ApiResponse<{ token: string; user: User }>> {
+  async login(credentials: LoginCredentials): Promise<ApiResponse<{ accessToken: string; refreshToken: string; user: User }>> {
     try {
       const response = await this.authApiClient.login(credentials);
       
-      if (response.success) {
+      if (response.success && response.user) {
         const user = this.mapUserModelToEntity(response.user);
         return {
           success: true,
           data: {
-            token: response.token,
+            accessToken: response.accessToken,
+            refreshToken: response.refreshToken,
             user
           },
           message: 'Login successful'
@@ -50,16 +51,17 @@ export class AuthRepositoryImpl implements AuthRepository {
     }
   }
 
-  async googleLogin(idToken: string): Promise<ApiResponse<{ token: string; user: User }>> {
+  async googleLogin(googleToken: string): Promise<ApiResponse<{ accessToken: string; refreshToken: string; user: User }>> {
     try {
-      const response = await this.authApiClient.googleLogin(idToken);
+      const response = await this.authApiClient.googleLogin(googleToken);
       
-      if (response.success) {
+      if (response.success && response.user) {
         const user = this.mapUserModelToEntity(response.user);
         return {
           success: true,
           data: {
-            token: response.token,
+            accessToken: response.accessToken,
+            refreshToken: response.refreshToken,
             user
           },
           message: 'Google login successful'
@@ -82,10 +84,27 @@ export class AuthRepositoryImpl implements AuthRepository {
     await this.authApiClient.logout();
   }
 
-  async verifyEmail(email: string, code: string): Promise<ApiResponse> {
+  async verifyEmail(email: string, code: string): Promise<ApiResponse<{ accessToken?: string; refreshToken?: string; user?: User }>> {
     try {
       const response = await this.authApiClient.verifyEmail(email, code);
-      return response;
+      
+      if (response.success) {
+        const user = response.user ? this.mapUserModelToEntity(response.user) : undefined;
+        return {
+          success: true,
+          data: {
+            accessToken: response.accessToken,
+            refreshToken: response.refreshToken,
+            user
+          },
+          message: response.message
+        };
+      }
+      
+      return {
+        success: false,
+        message: response.message || 'Email verification failed'
+      };
     } catch (error) {
       return {
         success: false,
@@ -118,9 +137,9 @@ export class AuthRepositoryImpl implements AuthRepository {
     }
   }
 
-  async resetPassword(token: string, newPassword: string): Promise<ApiResponse> {
+  async resetPassword(email: string, code: string, newPassword: string): Promise<ApiResponse> {
     try {
-      const response = await this.authApiClient.resetPassword(token, newPassword);
+      const response = await this.authApiClient.resetPassword(email, code, newPassword);
       return response;
     } catch (error) {
       return {
@@ -194,8 +213,7 @@ export class AuthRepositoryImpl implements AuthRepository {
   }
 
   async getKYCStatus(): Promise<ApiResponse<{ status: string; documents: any[] }>> {
-    // Implementation depends on backend endpoint
-    // This is a placeholder
+    // TODO: Implement when BE endpoint is available
     return {
       success: true,
       data: {
@@ -206,46 +224,44 @@ export class AuthRepositoryImpl implements AuthRepository {
     };
   }
 
+  // =========================================================================
+  // TOKEN MANAGEMENT - Delegates to AuthApiClient (BaseApiClient)
+  // =========================================================================
+
   async getStoredToken(): Promise<string | null> {
-    // This will be implemented with AsyncStorage in React Native
-    // For now, using localStorage fallback
-    try {
-      if (typeof window !== 'undefined' && window.localStorage) {
-        return localStorage.getItem('auth_token');
-      }
-      return null;
-    } catch (error) {
-      return null;
-    }
+    return this.authApiClient.getStoredAccessToken();
   }
 
-  async setStoredToken(token: string): Promise<void> {
-    try {
-      if (typeof window !== 'undefined' && window.localStorage) {
-        localStorage.setItem('auth_token', token);
-      }
-    } catch (error) {
-      console.warn('Error storing token:', error);
-    }
+  async setStoredTokens(accessToken: string, refreshToken?: string): Promise<void> {
+    await this.authApiClient.setStoredTokens(accessToken, refreshToken);
   }
 
-  async clearStoredToken(): Promise<void> {
-    try {
-      if (typeof window !== 'undefined' && window.localStorage) {
-        localStorage.removeItem('auth_token');
-      }
-    } catch (error) {
-      console.warn('Error clearing token:', error);
-    }
+  async clearStoredTokens(): Promise<void> {
+    await this.authApiClient.clearStoredTokens();
   }
 
-  async refreshToken(): Promise<ApiResponse<{ token: string }>> {
-    // Implementation depends on backend endpoint
-    // This is a placeholder
-    return {
-      success: false,
-      message: 'Token refresh not implemented'
-    };
+  async refreshToken(): Promise<ApiResponse<{ accessToken: string }>> {
+    try {
+      const response = await this.authApiClient.refreshToken();
+      
+      if (response.success && response.accessToken) {
+        return {
+          success: true,
+          data: { accessToken: response.accessToken },
+          message: 'Token refreshed'
+        };
+      }
+      
+      return {
+        success: false,
+        message: 'Token refresh failed'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : 'Token refresh failed'
+      };
+    }
   }
 
   async registerPushToken(pushToken: string): Promise<ApiResponse> {
@@ -261,7 +277,7 @@ export class AuthRepositoryImpl implements AuthRepository {
   }
 
   async unregisterPushToken(): Promise<ApiResponse> {
-    // Implementation depends on backend endpoint
+    // TODO: Implement when BE endpoint is available
     return {
       success: true,
       message: 'Push token unregistered'

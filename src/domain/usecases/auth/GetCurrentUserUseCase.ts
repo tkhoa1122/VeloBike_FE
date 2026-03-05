@@ -6,18 +6,18 @@ export class GetCurrentUserUseCase {
 
   async execute(): Promise<User | null> {
     try {
-      // Check if we have a stored token
+      // Check if we have a stored access token
       const token = await this.authRepository.getStoredToken();
       if (!token) {
         return null;
       }
 
-      // Try to get current user
+      // Try to get current user (auto-refresh on 401 is handled by BaseApiClient)
       const user = await this.authRepository.getCurrentUser();
       return user;
     } catch (error) {
-      // If there's an error (like 401), clear the token
-      await this.authRepository.clearStoredToken();
+      // If there's an error (like 401 after refresh failed), clear all tokens
+      await this.authRepository.clearStoredTokens();
       return null;
     }
   }

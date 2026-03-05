@@ -4,17 +4,18 @@ import { ApiResponse } from '../entities/Common';
 export interface AuthRepository {
   // Authentication
   register(data: RegisterData): Promise<ApiResponse>;
-  login(credentials: LoginCredentials): Promise<ApiResponse<{ token: string; user: User }>>;
-  googleLogin(idToken: string): Promise<ApiResponse<{ token: string; user: User }>>;
+  login(credentials: LoginCredentials): Promise<ApiResponse<{ accessToken: string; refreshToken: string; user: User }>>;
+  googleLogin(googleToken: string): Promise<ApiResponse<{ accessToken: string; refreshToken: string; user: User }>>;
+  // facebookLogin: bỏ - không dùng
   logout(): Promise<void>;
   
   // Email verification
-  verifyEmail(email: string, code: string): Promise<ApiResponse>;
+  verifyEmail(email: string, code: string): Promise<ApiResponse<{ accessToken?: string; refreshToken?: string; user?: User }>>;
   resendVerificationCode(email: string): Promise<ApiResponse>;
   
   // Password management
   forgotPassword(email: string): Promise<ApiResponse>;
-  resetPassword(token: string, newPassword: string): Promise<ApiResponse>;
+  resetPassword(email: string, code: string, newPassword: string): Promise<ApiResponse>;
   changePassword(currentPassword: string, newPassword: string): Promise<ApiResponse>;
   
   // Profile management
@@ -27,9 +28,9 @@ export interface AuthRepository {
   
   // Token management
   getStoredToken(): Promise<string | null>;
-  setStoredToken(token: string): Promise<void>;
-  clearStoredToken(): Promise<void>;
-  refreshToken(): Promise<ApiResponse<{ token: string }>>;
+  setStoredTokens(accessToken: string, refreshToken?: string): Promise<void>;
+  clearStoredTokens(): Promise<void>;
+  refreshToken(): Promise<ApiResponse<{ accessToken: string }>>;
   
   // Device management
   registerPushToken(pushToken: string): Promise<ApiResponse>;
