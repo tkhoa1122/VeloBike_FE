@@ -1,41 +1,41 @@
 {
   "project_info": {
-    "project_number": "3654946124",
-    "project_id": "velobike-9d6ca",
-    "storage_bucket": "velobike-9d6ca.firebasestorage.app"
+    "project_number": "682683625862",
+    "project_id": "velobike-9d912",
+    "storage_bucket": "velobike-9d912.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:3654946124:android:2725ad8ab3323ccc1f53e9",
+        "mobilesdk_app_id": "1:682683625862:android:a38cdd9282b0a251f4bc07",
         "android_client_info": {
           "package_name": "com.velobike_fe"
         }
       },
       "oauth_client": [
         {
-          "client_id": "3654946124-vq8t3cnhhg8vf10q6t9qoiq8lnfun786.apps.googleusercontent.com",
+          "client_id": "682683625862-ks477d4o9s1999i9v6kmeubj1urb891e.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.velobike_fe",
-            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+            "certificate_hash": "b252c08bce9aedd0ff4bf36c1477aa0c99d1e1ce"
           }
         },
         {
-          "client_id": "3654946124-ei7ku1bujv5961eq1tmbokm8c7csc9bh.apps.googleusercontent.com",
+          "client_id": "682683625862-kr755p90024ou1her2hbglpusrq6cm7j.apps.googleusercontent.com",
           "client_type": 3
         }
       ],
       "api_key": [
         {
-          "current_key": "AIzaSyDUOACekaP5_xd5zj24GVR8hUtXjKCAt_M"
+          "current_key": "AIzaSyCMJmLMhLFy58kzxtJSXjivIXTlEnPXEt4"
         }
       ],
       "services": {
         "appinvite_service": {
           "other_platform_oauth_client": [
             {
-              "client_id": "3654946124-ei7ku1bujv5961eq1tmbokm8c7csc9bh.apps.googleusercontent.com",
+              "client_id": "682683625862-kr755p90024ou1her2hbglpusrq6cm7j.apps.googleusercontent.com",
               "client_type": 3
             }
           ]
