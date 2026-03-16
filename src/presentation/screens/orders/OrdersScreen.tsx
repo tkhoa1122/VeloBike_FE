@@ -156,12 +156,20 @@ export const OrdersScreen: React.FC<OrdersScreenProps> = ({ onBack, onOrderPress
         <TouchableOpacity onPress={onBack} style={styles.backBtn}>
           <ArrowLeft size={22} color={COLORS.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Đơn hàng của tôi</Text>
+        <View style={styles.headerCenter}>
+          <Text style={styles.headerTitle}>Đơn hàng của tôi</Text>
+          {filtered.length > 0 && <Text style={styles.headerCount}>({filtered.length})</Text>}
+        </View>
         <View style={{ width: 30 }} />
       </View>
 
       {/* Status tabs */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabScroll}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.tabScrollView}
+        contentContainerStyle={styles.tabScroll}
+      >
         {STATUS_TABS.map(tab => (
           <TouchableOpacity key={tab.key} style={[styles.tab, activeTab === tab.key && styles.tabActive]} onPress={() => setActiveTab(tab.key)}>
             <Text style={[styles.tabText, activeTab === tab.key && styles.tabTextActive]}>{tab.label}</Text>
@@ -196,9 +204,12 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: SPACING.base, paddingVertical: SPACING.md, backgroundColor: COLORS.white, borderBottomWidth: 1, borderBottomColor: COLORS.border },
   backBtn: { padding: 4 },
+  headerCenter: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs },
   headerTitle: { fontSize: FONT_SIZES.lg, fontWeight: FONT_WEIGHTS.semibold, color: COLORS.text },
-  tabScroll: { paddingHorizontal: SPACING.xl, paddingVertical: SPACING.md, gap: SPACING.sm, backgroundColor: COLORS.white },
-  tab: { paddingHorizontal: SPACING.base, paddingVertical: SPACING.sm, borderRadius: RADIUS.full, borderWidth: 1, borderColor: COLORS.border },
+  headerCount: { fontSize: FONT_SIZES.md, fontWeight: FONT_WEIGHTS.medium, color: COLORS.textSecondary },
+  tabScrollView: { backgroundColor: COLORS.white, maxHeight: 56 },
+  tabScroll: { paddingHorizontal: SPACING.xl, paddingVertical: SPACING.sm, gap: SPACING.sm, alignItems: 'center' },
+  tab: { height: 36, minHeight: 36, alignSelf: 'center', justifyContent: 'center', paddingHorizontal: SPACING.base, borderRadius: RADIUS.full, borderWidth: 1, borderColor: COLORS.border },
   tabActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
   tabText: { fontSize: FONT_SIZES.sm, color: COLORS.textSecondary, fontWeight: FONT_WEIGHTS.medium },
   tabTextActive: { color: COLORS.white, fontWeight: FONT_WEIGHTS.semibold },

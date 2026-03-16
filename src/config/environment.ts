@@ -22,11 +22,11 @@ export const ENV = {
     
   // Google OAuth - React Native
   GOOGLE_CLIENT_ID: __DEV__
-    ? '3654946124-ei7ku1bujv5961eq1tmbokm8c7csc9bh.apps.googleusercontent.com'  
+    ? '3654946124-ei7ku1bujv5961eq1tmbokm8c7csc9bh.apps.googleusercontent.com'
     : '3654946124-ei7ku1bujv5961eq1tmbokm8c7csc9bh.apps.googleusercontent.com',
   
   // Google Web Client ID (cho backend communication)
-  GOOGLE_WEB_CLIENT_ID: '1080123037938-ghlbd1ri52ps1bqrds1cld31ea77b5ju.apps.googleusercontent.com',
+  GOOGLE_WEB_CLIENT_ID: '3654946124-ei7ku1bujv5961eq1tmbokm8c7csc9bh.apps.googleusercontent.com',
     
   // Other OAuth providers
   FACEBOOK_APP_ID: __DEV__
@@ -55,7 +55,7 @@ export const ENV = {
     : 'velobike_prod',
     
   // Firebase (for push notifications)
-  FIREBASE_PROJECT_ID: 'velobike-9d912',
+  FIREBASE_PROJECT_ID: 'velobike-9d6ca',
   
   // FPT AI (for chatbot)
   FPT_AI_API_KEY: 'IXNxf5eMiCTBKkPGnSIvqWE6TjUIRlCz',

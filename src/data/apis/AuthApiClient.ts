@@ -1,5 +1,6 @@
 import { BaseApiClient } from './BaseApiClient';
 import { ENDPOINTS } from '../../config/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { 
   LoginResponseModel, 
   RegisterResponseModel, 
@@ -10,6 +11,8 @@ import {
   UserModel 
 } from '../models/UserModel';
 import { LoginCredentials, RegisterData, UpdateProfileData, KycDocument } from '../../domain/entities/User';
+
+const KYC_STATUS_CACHE_KEY = 'kyc_my_status_cache_v1';
 
 export class AuthApiClient extends BaseApiClient {
   /**
@@ -119,17 +122,121 @@ export class AuthApiClient extends BaseApiClient {
    * Submit KYC without multipart payload
    */
   async submitKYC(data: {
-    idCardFront: string;
-    selfie: string;
+    idCardFront: { uri: string; name: string; type: string };
+    selfie: { uri: string; name: string; type: string };
   }): Promise<{ success: boolean; message?: string; data?: any }> {
-    return this.post(ENDPOINTS.KYC.SUBMIT, data);
+    const formData = new FormData();
+    formData.append('idCardFront', data.idCardFront as any);
+    formData.append('selfie', data.selfie as any);
+    return this.upload(ENDPOINTS.KYC.SUBMIT, formData);
   }
 
   /**
    * Get current KYC status
    */
   async getKYCStatus(): Promise<{ success: boolean; data?: any; message?: string }> {
-    return this.get(ENDPOINTS.KYC.MY_STATUS);
+    const url = `${this.baseURL}${ENDPOINTS.KYC.MY_STATUS}`;
+    const headers = await this.getHeaders();
+
+    const requestHeaders: Record<string, string> = {
+      ...headers,
+      // Ask intermediaries to revalidate so FE can decide how to handle 304 safely.
+      'Cache-Control': 'no-cache',
+      Pragma: 'no-cache',
+    };
+
+    const readCached = async (): Promise<any | null> => {
+      try {
+        const raw = await AsyncStorage.getItem(KYC_STATUS_CACHE_KEY);
+        return raw ? JSON.parse(raw) : null;
+      } catch {
+        return null;
+      }
+    };
+
+    const writeCached = async (data: any): Promise<void> => {
+      try {
+        await AsyncStorage.setItem(KYC_STATUS_CACHE_KEY, JSON.stringify(data));
+      } catch {
+        // Ignore cache write failures.
+      }
+    };
+
+    const parseJsonSafe = async (response: Response): Promise<any | null> => {
+      const contentType = response.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) return null;
+      try {
+        return await response.json();
+      } catch {
+        return null;
+      }
+    };
+
+    try {
+      let response = await fetch(url, {
+        method: 'GET',
+        headers: requestHeaders,
+      });
+
+      // 304 is valid for GET with revalidation. Use cached snapshot if available.
+      if (response.status === 304) {
+        const cached = await readCached();
+        if (cached) {
+          return {
+            success: true,
+            data: cached,
+            message: 'KYC status loaded from cache',
+          };
+        }
+
+        // No local cache yet: force a cache-busted fetch to guarantee a body.
+        response = await fetch(`${url}?_t=${Date.now()}`, {
+          method: 'GET',
+          headers: requestHeaders,
+        });
+      }
+
+      if (!response.ok) {
+        await this.handleErrorResponse(response);
+      }
+
+      const payload = await parseJsonSafe(response);
+      if (!payload) {
+        const cached = await readCached();
+        if (cached) {
+          return {
+            success: true,
+            data: cached,
+            message: 'KYC status loaded from cache',
+          };
+        }
+
+        return {
+          success: false,
+          message: 'Không thể đọc dữ liệu trạng thái KYC',
+        };
+      }
+
+      if (payload.success && payload.data) {
+        await writeCached(payload.data);
+      }
+
+      return payload;
+    } catch (error) {
+      const cached = await readCached();
+      if (cached) {
+        return {
+          success: true,
+          data: cached,
+          message: 'Tạm dùng dữ liệu KYC đã lưu',
+        };
+      }
+
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : 'Không thể lấy trạng thái KYC',
+      };
+    }
   }
 
   /**

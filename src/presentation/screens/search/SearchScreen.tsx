@@ -140,7 +140,13 @@ export const SearchScreen: React.FC<SearchScreenProps> = ({ onListingPress }) =>
       </Animated.View>
 
       {/* Category chips */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipScroll}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        scrollEnabled
+        style={styles.chipScrollView}
+        contentContainerStyle={styles.chipScroll}
+      >
         {BIKE_TYPES.map(t => (
           <TouchableOpacity key={t} style={[styles.chip, selectedType === t && styles.chipActive]} onPress={() => { setSelectedType(selectedType === t ? null : t); setTimeout(handleSearch, 0); }}>
             <Text style={[styles.chipText, selectedType === t && styles.chipTextActive]}>{formatBikeType(t)}</Text>
@@ -178,15 +184,13 @@ export const SearchScreen: React.FC<SearchScreenProps> = ({ onListingPress }) =>
                 ))}
               </View>
               <Text style={styles.filterLabel}>Thương hiệu</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                <View style={styles.filterChips}>
-                  {POPULAR_BIKE_BRANDS.slice(0, 15).map(b => (
+              <View style={styles.filterChips}>
+                {POPULAR_BIKE_BRANDS.slice(0, 15).map(b => (
                     <TouchableOpacity key={b} style={[styles.fChip, selectedBrand === b && styles.fChipActive]} onPress={() => setSelectedBrand(selectedBrand === b ? null : b)}>
                       <Text style={[styles.fChipText, selectedBrand === b && styles.fChipTextActive]}>{b}</Text>
                     </TouchableOpacity>
                   ))}
-                </View>
-              </ScrollView>
+              </View>
               <Text style={styles.filterLabel}>Khoảng giá (VNĐ)</Text>
               <View style={styles.priceRow}>
                 <TextInput style={styles.priceInput} placeholder="Từ" placeholderTextColor={COLORS.textLight} keyboardType="numeric" value={priceMin} onChangeText={setPriceMin} />
@@ -213,8 +217,9 @@ const styles = StyleSheet.create({
   filterBtn: { width: 44, height: 44, borderRadius: RADIUS.lg, backgroundColor: COLORS.primarySurface, justifyContent: 'center', alignItems: 'center' },
   filterBadge: { position: 'absolute', top: 4, right: 4, width: 16, height: 16, borderRadius: 8, backgroundColor: COLORS.accent, justifyContent: 'center', alignItems: 'center' },
   filterBadgeText: { fontSize: 10, fontWeight: FONT_WEIGHTS.bold, color: COLORS.white },
-  chipScroll: { paddingHorizontal: SPACING.base, gap: SPACING.sm, paddingVertical: SPACING.xs },
-  chip: { paddingHorizontal: SPACING.md, paddingVertical: SPACING.xs, borderRadius: RADIUS.full, borderWidth: 1, borderColor: COLORS.border },
+  chipScrollView: { maxHeight: 52 },
+  chipScroll: { paddingHorizontal: SPACING.base, gap: SPACING.sm, paddingVertical: SPACING.xs, alignItems: 'center' },
+  chip: { height: 34, minHeight: 34, alignSelf: 'center', justifyContent: 'center', paddingHorizontal: SPACING.md, borderRadius: RADIUS.full, borderWidth: 1, borderColor: COLORS.border },
   chipActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
   chipText: { fontSize: FONT_SIZES.sm, color: COLORS.textSecondary, fontWeight: FONT_WEIGHTS.medium },
   chipTextActive: { color: COLORS.white },
@@ -240,11 +245,11 @@ const styles = StyleSheet.create({
   emptyTitle: { fontSize: FONT_SIZES.lg, fontWeight: FONT_WEIGHTS.semibold, color: COLORS.text },
   emptySub: { fontSize: FONT_SIZES.md, color: COLORS.textLight },
   modalOverlay: { flex: 1, backgroundColor: COLORS.overlay, justifyContent: 'flex-end' },
-  modalSheet: { backgroundColor: COLORS.white, borderTopLeftRadius: RADIUS.xl, borderTopRightRadius: RADIUS.xl, maxHeight: '80%', paddingHorizontal: SPACING.xl, paddingTop: SPACING.xl },
+  modalSheet: { backgroundColor: COLORS.white, borderTopLeftRadius: RADIUS.xl, borderTopRightRadius: RADIUS.xl, maxHeight: '90%', paddingHorizontal: SPACING.xl, paddingTop: SPACING.xl },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.xl },
   modalTitle: { fontSize: FONT_SIZES.xl, fontWeight: FONT_WEIGHTS.bold, color: COLORS.text },
   filterLabel: { fontSize: FONT_SIZES.base, fontWeight: FONT_WEIGHTS.semibold, color: COLORS.text, marginTop: SPACING.lg, marginBottom: SPACING.sm },
-  filterChips: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },
+  filterChips: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm, paddingHorizontal: 0 },
   fChip: { paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.border },
   fChipActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
   fChipText: { fontSize: FONT_SIZES.sm, color: COLORS.textSecondary },

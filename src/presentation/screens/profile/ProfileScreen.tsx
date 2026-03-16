@@ -28,7 +28,6 @@ import {
   FileText,
   Shield,
   Store,
-  Award,
 } from 'lucide-react-native';
 import {
   COLORS,
@@ -40,6 +39,9 @@ import {
   ICON_SIZES,
 } from '../../../config/theme';
 import { useAuthStore } from '../../viewmodels/AuthStore';
+import { useOrderStore } from '../../viewmodels/OrderStore';
+import { useWishlistStore } from '../../viewmodels/WishlistStore';
+import { useNotificationStore } from '../../viewmodels/NotificationStore';
 import { Button } from '../../components/common/Button';
 import { container } from '../../../di/Container';
 import Toast from 'react-native-toast-message';
@@ -63,6 +65,9 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
 }) => {
   const insets = useSafeAreaInsets();
   const { user, logout } = useAuthStore();
+  const { totalCount: orderCount } = useOrderStore();
+  const { totalItems: wishlistCount } = useWishlistStore();
+  const { unreadCount } = useNotificationStore();
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -76,6 +81,20 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
 
   const handleUpgradeToSeller = useCallback(async () => {
     try {
+      const kycStatus = await container().authApiClient.getKYCStatus();
+      const status = kycStatus.data?.status;
+      if (!kycStatus.success || status !== 'VERIFIED') {
+        Toast.show({
+          type: 'info',
+          text1: 'Cần xác minh trước khi đăng ký bán hàng',
+          text2: 'Hãy hoàn tất KYC ở bước cuối để kích hoạt tài khoản người bán.',
+        });
+
+        // KYC is part of seller registration flow, not a standalone profile action.
+        onKycVerification?.();
+        return;
+      }
+
       const result = await container().authApiClient.upgradeToSeller();
       if (result.success) {
         await useAuthStore.getState().getCurrentUser();
@@ -101,38 +120,11 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
     }
   }, []);
 
-  const handleCheckKycStatus = useCallback(async () => {
-    try {
-      const result = await container().authApiClient.getKYCStatus();
-      if (!result.success) {
-        Toast.show({
-          type: 'error',
-          text1: 'Không thể kiểm tra KYC',
-          text2: result.message || 'Vui lòng thử lại sau',
-        });
-        return;
-      }
-
-      const status = result.data?.status || 'PENDING';
-      Toast.show({
-        type: 'info',
-        text1: 'Trạng thái xác minh',
-        text2: `KYC hiện tại: ${status}`,
-      });
-    } catch (error) {
-      Toast.show({
-        type: 'error',
-        text1: 'Không thể kiểm tra KYC',
-        text2: error instanceof Error ? error.message : 'Vui lòng thử lại sau',
-      });
-    }
-  }, []);
-
-  // Mock stats
+  // Real stats from stores
   const stats = [
-    { label: 'Đã mua', value: '3' },
-    { label: 'Yêu thích', value: '12' },
-    { label: 'Đánh giá', value: '4.8' },
+    { label: 'Đã mua', value: orderCount?.toString() || '0' },
+    { label: 'Yêu thích', value: wishlistCount?.toString() || '0' },
+    { label: 'Đánh giá', value: user?.reputation?.rating?.toFixed(1) || '0.0' },
   ];
 
   interface MenuItem {
@@ -152,22 +144,21 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
     {
       title: 'Giao dịch',
       items: [
-        { icon: ShoppingBag, label: 'Đơn hàng của tôi', onPress: onOrders, badge: '2' },
+        { icon: ShoppingBag, label: 'Đơn hàng của tôi', onPress: onOrders, badge: orderCount > 0 ? orderCount?.toString() : undefined },
         { icon: Heart, label: 'Sản phẩm yêu thích', onPress: () => {} },
-        { icon: Star, label: 'Đánh giá của tôi', onPress: () => {} },
+        { icon: Star, label: 'Đánh giá của tôi', onPress: () => Toast.show({ type: 'info', text1: 'Tính năng sắp ra mắt', text2: 'Chức năng xem đánh giá sẽ được cập nhật' }) },
       ],
     },
     {
       title: 'Bán hàng',
       items: [
         { icon: Store, label: 'Đăng ký bán hàng', onPress: handleUpgradeToSeller, accent: true },
-        { icon: Award, label: 'Xác minh tài khoản', onPress: onKycVerification ?? handleCheckKycStatus },
       ],
     },
     {
       title: 'Cài đặt',
       items: [
-        { icon: Bell, label: 'Thông báo', onPress: onNotifications, badge: '5' },
+        { icon: Bell, label: 'Thông báo', onPress: onNotifications, badge: unreadCount > 0 ? unreadCount?.toString() : undefined },
         { icon: Settings, label: 'Cài đặt', onPress: onSettings },
         { icon: Shield, label: 'Bảo mật & Quyền riêng tư', onPress: () => {} },
       ],

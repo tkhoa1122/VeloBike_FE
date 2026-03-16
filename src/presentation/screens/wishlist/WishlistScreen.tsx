@@ -88,7 +88,7 @@ export const WishlistScreen: React.FC<WishlistScreenProps> = ({ onListingPress }
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.white} />
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Yêu thích</Text>
-        <Text style={styles.headerCount}>{totalItems} sản phẩm</Text>
+        {items.length > 0 && <Text style={styles.headerCount}>{items.length} sản phẩm</Text>}
       </View>
       {items.length === 0 ? (
         <View style={styles.empty}>

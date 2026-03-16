@@ -5,8 +5,7 @@ import { ArrowLeft, Camera, ShieldCheck } from 'lucide-react-native';
 import tw from 'twrnc';
 import Toast from 'react-native-toast-message';
 import { COLORS } from '../../../config/theme';
-import { useImagePicker } from '../../hooks/useImagePicker';
-import { useUploadStore } from '../../viewmodels/UploadStore';
+import { PickedImage, useImagePicker } from '../../hooks/useImagePicker';
 import { container } from '../../../di/Container';
 
 interface KycSubmitScreenProps {
@@ -49,13 +48,12 @@ const KycImageField: React.FC<KycImageFieldProps> = ({ label, value, loading, on
 };
 
 export default function KycSubmitScreen({ onBack }: KycSubmitScreenProps) {
-  const [idCardFront, setIdCardFront] = useState<string | undefined>();
-  const [selfie, setSelfie] = useState<string | undefined>();
+  const [idCardFront, setIdCardFront] = useState<PickedImage | undefined>();
+  const [selfie, setSelfie] = useState<PickedImage | undefined>();
   const [submitting, setSubmitting] = useState(false);
   const [uploadingField, setUploadingField] = useState<'idCardFront' | 'selfie' | null>(null);
 
-  const { showImagePicker, toUploadFileData } = useImagePicker({ maxFiles: 1, quality: 1 });
-  const { uploadFile } = useUploadStore();
+  const { showImagePicker } = useImagePicker({ maxFiles: 1, quality: 1 });
 
   const canSubmit = useMemo(() => !!idCardFront && !!selfie && !submitting, [idCardFront, selfie, submitting]);
 
@@ -66,22 +64,12 @@ export default function KycSubmitScreen({ onBack }: KycSubmitScreenProps) {
       if (!images.length) {
         return;
       }
-
-      const uploadData = toUploadFileData(images);
-      const uploadedUrl = await uploadFile(uploadData[0]);
-      if (!uploadedUrl) {
-        Toast.show({
-          type: 'error',
-          text1: 'Upload thất bại',
-          text2: 'Không thể tải ảnh lên, vui lòng thử lại.',
-        });
-        return;
-      }
+      const selectedImage = images[0];
 
       if (field === 'idCardFront') {
-        setIdCardFront(uploadedUrl);
+        setIdCardFront(selectedImage);
       } else {
-        setSelfie(uploadedUrl);
+        setSelfie(selectedImage);
       }
     } catch (error) {
       Toast.show({
@@ -106,7 +94,18 @@ export default function KycSubmitScreen({ onBack }: KycSubmitScreenProps) {
 
     setSubmitting(true);
     try {
-      const result = await container().authApiClient.submitKYC({ idCardFront, selfie });
+      const result = await container().authApiClient.submitKYC({
+        idCardFront: {
+          uri: idCardFront.uri,
+          name: idCardFront.name,
+          type: idCardFront.type,
+        },
+        selfie: {
+          uri: selfie.uri,
+          name: selfie.name,
+          type: selfie.type,
+        },
+      });
       if (!result.success) {
         Toast.show({
           type: 'error',
@@ -153,14 +152,14 @@ export default function KycSubmitScreen({ onBack }: KycSubmitScreenProps) {
 
         <KycImageField
           label="Ảnh mặt trước CCCD"
-          value={idCardFront}
+          value={idCardFront?.uri}
           loading={uploadingField === 'idCardFront'}
           onPick={() => pickAndUpload('idCardFront')}
         />
 
         <KycImageField
           label="Ảnh selfie cầm CCCD"
-          value={selfie}
+          value={selfie?.uri}
           loading={uploadingField === 'selfie'}
           onPick={() => pickAndUpload('selfie')}
         />

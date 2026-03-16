@@ -18,7 +18,7 @@ interface AuthState {
   verifyEmail: (email: string, code: string) => Promise<boolean>;
   resendVerification: (email: string) => Promise<boolean>;
   logout: () => Promise<void>;
-  getCurrentUser: () => Promise<void>;
+  getCurrentUser: (silent?: boolean) => Promise<void>;
   forgotPassword: (email: string) => Promise<boolean>;
   updateProfile: (data: UpdateProfileData) => Promise<boolean>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<boolean>;
@@ -212,14 +212,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
-  getCurrentUser: async (): Promise<void> => {
+  getCurrentUser: async (silent: boolean = false): Promise<void> => {
     // Don't set loading if already loading or if already authenticated
     const { loadingState, isAuthenticated } = get();
     if (loadingState === 'loading' || isAuthenticated) {
       return;
     }
     
-    set({ loadingState: 'loading', error: null });
+    set({ loadingState: 'loading', error: silent ? get().error : null });
     
     try {
       const user = await useCase.getCurrentUser().execute();
@@ -243,8 +243,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       set({ 
         user: null,
         isAuthenticated: false,
-        loadingState: 'error',
-        error: error instanceof Error ? error.message : 'Failed to get user' 
+        loadingState: silent ? 'idle' : 'error',
+        error: silent ? null : (error instanceof Error ? error.message : 'Failed to get user') 
       });
     }
   },

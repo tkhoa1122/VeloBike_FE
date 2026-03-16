@@ -11,8 +11,8 @@ export const APP_CONFIG = {
   // OAuth Configuration
   GOOGLE_OAUTH: {
     CLIENT_ID: __DEV__ 
-      ? '1080123037938-ghlbd1ri52ps1bqrds1cld31ea77b5ju.apps.googleusercontent.com'
-      : '1080123037938-ghlbd1ri52ps1bqrds1cld31ea77b5ju.apps.googleusercontent.com',
+      ? '3654946124-ei7ku1bujv5961eq1tmbokm8c7csc9bh.apps.googleusercontent.com'
+      : '3654946124-ei7ku1bujv5961eq1tmbokm8c7csc9bh.apps.googleusercontent.com',
     REDIRECT_URI: __DEV__
       ? 'http://localhost:3000'
       : 'https://velobike.app',

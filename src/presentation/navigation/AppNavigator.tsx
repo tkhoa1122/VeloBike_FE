@@ -36,7 +36,7 @@ export const AppNavigator: React.FC = () => {
         setHasSeenOnboarding(onboardingDone === 'true');
 
         // Try to restore user session from stored token
-        await getCurrentUser();
+        await getCurrentUser(true);
       } catch (e) {
         // Ignore errors — just proceed
       } finally {
