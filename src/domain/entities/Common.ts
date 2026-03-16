@@ -6,18 +6,21 @@
 export interface ApiResponse<T = any> {
   success: boolean;
   data?: T;
-  message: string;
+  message?: string;
+  error?: string;
   errors?: ValidationError[];
 }
 
 // Paginated response
 export interface PaginatedResponse<T = any> {
   success: boolean;
-  count: number;
-  page: number;
-  totalPages: number;
-  data: T[];
+  count?: number;
+  page?: number;
+  currentPage?: number;
+  totalPages?: number;
+  data?: T[];
   message?: string;
+  error?: string;
 }
 
 // Validation error

@@ -213,15 +213,29 @@ export class AuthRepositoryImpl implements AuthRepository {
   }
 
   async getKYCStatus(): Promise<ApiResponse<{ status: string; documents: any[] }>> {
-    // TODO: Implement when BE endpoint is available
-    return {
-      success: true,
-      data: {
-        status: 'PENDING',
-        documents: []
-      },
-      message: 'KYC status retrieved'
-    };
+    try {
+      const response = await this.authApiClient.getKYCStatus();
+      if (response.success) {
+        return {
+          success: true,
+          data: {
+            status: response.data?.status || 'NOT_SUBMITTED',
+            documents: response.data?.documents || [],
+          },
+          message: response.message || 'KYC status retrieved',
+        };
+      }
+
+      return {
+        success: false,
+        message: response.message || 'Không thể lấy trạng thái KYC',
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : 'Không thể lấy trạng thái KYC',
+      };
+    }
   }
 
   // =========================================================================

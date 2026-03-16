@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { LoadingState } from '../../domain/entities/Common';
 import { container } from '../../di/Container';
 import type { ConversationEntry, MessageEntry } from '../../data/repositories/MessageRepositoryImpl';
+import type { ChatbotConversation, SendChatbotMessageData } from '../../domain/entities/Message';
 
 interface MessageState {
   conversations: ConversationEntry[];
@@ -19,6 +20,8 @@ interface MessageState {
     content: string;
     attachments?: string[];
   }) => Promise<boolean>;
+  sendChatbotMessage: (data: SendChatbotMessageData) => Promise<string | null>;
+  getChatbotHistory: (page?: number, limit?: number) => Promise<ChatbotConversation[]>;
   markAsRead: (messageId: string) => Promise<void>;
   clearMessages: () => void;
   clearError: () => void;
@@ -78,6 +81,27 @@ export const useMessageStore = create<MessageState>((set, get) => ({
     } catch (error) {
       set({ sendingState: 'error', error: error instanceof Error ? error.message : 'Không gửi được tin nhắn' });
       return false;
+    }
+  },
+
+  sendChatbotMessage: async (data): Promise<string | null> => {
+    try {
+      const repo = container().messageRepository;
+      const result = await repo.sendChatbotMessage(data);
+      return result.success && result.data ? result.data.reply : null;
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : 'Không gửi được tin nhắn chatbot' });
+      return null;
+    }
+  },
+
+  getChatbotHistory: async (page: number = 1, limit: number = 50): Promise<ChatbotConversation[]> => {
+    try {
+      const repo = container().messageRepository;
+      const result = await repo.getChatbotHistory(page, limit);
+      return result.success && result.data ? result.data : [];
+    } catch {
+      return [];
     }
   },
 

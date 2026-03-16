@@ -23,18 +23,37 @@ export const ENDPOINTS = {
     REGISTER: '/auth/register',
     LOGIN: '/auth/login',
     GOOGLE_LOGIN: '/auth/google',
+    FACEBOOK_LOGIN: '/auth/facebook',
     REFRESH_TOKEN: '/auth/refresh-token',
     VERIFY_EMAIL: '/auth/verify-email',
-    ME: '/auth/me',
-    PROFILE: '/auth/profile',
+    // Keep ME/PROFILE keys for backward compatibility, BE now serves user profile under /users/me
+    ME: '/users/me',
+    PROFILE: '/users/me',
     // UPLOAD_AVATAR: '/auth/upload-avatar', // TODO: BE chưa có route
     CHANGE_PASSWORD: '/auth/change-password',
     FORGOT_PASSWORD: '/auth/forgot-password',
     RESET_PASSWORD: '/auth/reset-password',
+    LOGOUT_ALL: '/auth/logout-all',
+    SESSIONS: '/auth/sessions',
+    KYC_SUBMIT: '/auth/kyc-submit',
     KYC_UPLOAD: '/auth/kyc-upload',
     LOGOUT: '/auth/logout',
     RESEND_VERIFICATION: '/auth/resend-verification',
     PUSH_TOKEN: '/auth/push-token',
+  },
+
+  USERS: {
+    ME: '/users/me',
+    DETAIL: (id: string) => `/users/${id}`,
+    BANK: '/users/me/bank',
+    ME_WALLET: '/users/me/wallet',
+    UPGRADE_TO_SELLER: '/users/me/upgrade-to-seller',
+  },
+
+  KYC: {
+    SUBMIT: '/kyc/submit',
+    MY_STATUS: '/kyc/my-status',
+    WEBHOOK: '/kyc/webhook',
   },
   
   // Listings
@@ -54,7 +73,12 @@ export const ENDPOINTS = {
   ORDERS: {
     CREATE: '/orders',
     DETAIL: (id: string) => `/orders/${id}`,
-    MY_ORDERS: '/orders/my-orders',
+    MY_ORDERS: '/orders',
+    LIST: '/orders',
+    TIMELINE: (id: string) => `/orders/${id}/timeline`,
+    UPDATE_STATUS: (id: string) => `/orders/${id}/status`,
+    UPDATE_SHIPPING_ADDRESS: (id: string) => `/orders/${id}/shipping-address`,
+    ESCROW_STATUS: (id: string) => `/orders/${id}/escrow-status`,
     TRANSITION: (id: string) => `/orders/${id}/transition`,
   },
   
@@ -62,6 +86,8 @@ export const ENDPOINTS = {
   PAYMENT: {
     CREATE_LINK: '/payment/create-link',
     WEBHOOK: '/payment/webhook',
+    INFO: (orderCode: number | string) => `/payment/info/${orderCode}`,
+    SIMULATE: '/payment/simulate-payment',
   },
   WALLET: {
     WITHDRAW: '/wallet/withdraw',
@@ -111,20 +137,37 @@ export const ENDPOINTS = {
     PLANS: '/subscriptions/plans',
     MY_SUBSCRIPTION: '/subscriptions/my-subscription',
     CHECK_QUOTA: '/subscriptions/check-quota',
+    CREATE_PAYMENT_LINK: '/subscriptions/create-payment-link',
     SUBSCRIBE: '/subscriptions/subscribe',
+    TEST_PAYMENT_SUCCESS: '/subscriptions/test-payment-success',
+    WEBHOOK: '/subscriptions/webhook',
   },
   CHATBOT: {
     MESSAGE: '/chatbot/webhook',
     HISTORY: '/chatbot/history',
+    QUOTA: '/chatbot/quota',
   },
   INSPECTIONS: '/inspections',
   LOGISTICS: {
-    CALCULATE_SHIPPING: '/logistics/calculate-shipping',
-    CREATE_SHIPPING: '/logistics/create-shipping',
-    TRACK: (trackingNumber: string) => `/logistics/track/${trackingNumber}`,
+    CALCULATE_FEE: '/logistics/calculate-fee',
+    CREATE_SHIPMENT: '/logistics/create-shipment',
+    TRACKING: (trackingNumber: string) => `/logistics/tracking/${trackingNumber}`,
+    // Compatibility aliases
+    CALCULATE_SHIPPING: '/logistics/calculate-fee',
+    CREATE_SHIPPING: '/logistics/create-shipment',
+    TRACK: (trackingNumber: string) => `/logistics/tracking/${trackingNumber}`,
   },
-  DISPUTES: '/disputes',
+  DISPUTES: {
+    LIST: '/disputes',
+    DETAIL: (id: string) => `/disputes/${id}`,
+    EVIDENCE: (id: string) => `/disputes/${id}/evidence`,
+  },
   ALERTS: '/alerts',
+  TRANSACTIONS: {
+    MY_TRANSACTIONS: '/transactions/my-transactions',
+    DETAIL: (id: string) => `/transactions/${id}`,
+    STATS: '/transactions/stats',
+  },
 } as const;
 
 export const SOCKET_EVENTS = {

@@ -84,14 +84,14 @@ export class AuthApiClient extends BaseApiClient {
    * Get current user profile
    */
   async getCurrentUser(): Promise<ProfileResponseModel> {
-    return this.get(ENDPOINTS.AUTH.ME);
+    return this.get(ENDPOINTS.USERS.ME);
   }
 
   /**
    * Update user profile
    */
   async updateProfile(data: UpdateProfileData): Promise<ProfileResponseModel> {
-    return this.put(ENDPOINTS.AUTH.PROFILE, data);
+    return this.put(ENDPOINTS.USERS.ME, data);
   }
 
   // uploadAvatar: TODO - BE chưa có route /auth/upload-avatar
@@ -113,6 +113,23 @@ export class AuthApiClient extends BaseApiClient {
     }
     
     return this.upload(ENDPOINTS.AUTH.KYC_UPLOAD, formData);
+  }
+
+  /**
+   * Submit KYC without multipart payload
+   */
+  async submitKYC(data: {
+    idCardFront: string;
+    selfie: string;
+  }): Promise<{ success: boolean; message?: string; data?: any }> {
+    return this.post(ENDPOINTS.KYC.SUBMIT, data);
+  }
+
+  /**
+   * Get current KYC status
+   */
+  async getKYCStatus(): Promise<{ success: boolean; data?: any; message?: string }> {
+    return this.get(ENDPOINTS.KYC.MY_STATUS);
   }
 
   /**
@@ -164,5 +181,12 @@ export class AuthApiClient extends BaseApiClient {
    */
   async registerPushToken(pushToken: string): Promise<{ success: boolean; message: string }> {
     return this.post(ENDPOINTS.AUTH.PUSH_TOKEN, { pushToken });
+  }
+
+  /**
+   * Upgrade current user from BUYER to SELLER
+   */
+  async upgradeToSeller(): Promise<{ success: boolean; message?: string; data?: any }> {
+    return this.post(ENDPOINTS.USERS.UPGRADE_TO_SELLER);
   }
 }

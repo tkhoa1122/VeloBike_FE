@@ -9,9 +9,9 @@ export class GetListingsUseCase {
     try {
       // Apply default values
       const searchParams: ListingSearchParams = {
+        ...params,
         page: params.page || 1,
         limit: Math.min(params.limit || 20, 50), // Max 50 items per page
-        ...params,
       };
 
       // Additional business rules

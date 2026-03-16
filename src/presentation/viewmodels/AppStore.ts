@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { AppSettings, FeatureFlags } from '../../domain/entities/Common';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface AppState {
   // App-wide state
@@ -123,11 +124,8 @@ export const useAppStore = create<AppState>((set, get) => ({
 // Helper functions (would be implemented with AsyncStorage in React Native)
 async function loadSettingsFromStorage(): Promise<Partial<AppSettings> | null> {
   try {
-    if (typeof window !== 'undefined' && window.localStorage) {
-      const saved = localStorage.getItem('app_settings');
-      return saved ? JSON.parse(saved) : null;
-    }
-    return null;
+    const saved = await AsyncStorage.getItem('app_settings');
+    return saved ? JSON.parse(saved) : null;
   } catch (error) {
     console.warn('Error loading settings:', error);
     return null;
@@ -136,9 +134,7 @@ async function loadSettingsFromStorage(): Promise<Partial<AppSettings> | null> {
 
 async function saveSettingsToStorage(settings: AppSettings): Promise<void> {
   try {
-    if (typeof window !== 'undefined' && window.localStorage) {
-      localStorage.setItem('app_settings', JSON.stringify(settings));
-    }
+    await AsyncStorage.setItem('app_settings', JSON.stringify(settings));
   } catch (error) {
     console.warn('Error saving settings:', error);
   }

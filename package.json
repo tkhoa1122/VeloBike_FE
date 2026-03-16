@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "android": "react-native run-android",
-    "ios": "react-native run-ios", 
+    "ios": "react-native run-ios",
     "start": "react-native start",
     "test": "jest"
   },
@@ -28,6 +28,7 @@
     "react-native-screens": "^4.23.0",
     "react-native-toast-message": "^2.3.3",
     "react-native-vector-icons": "^10.3.0",
+    "react-native-webview": "^13.16.1",
     "socket.io-client": "^4.8.3",
     "twrnc": "^4.16.0",
     "zustand": "^5.0.11"

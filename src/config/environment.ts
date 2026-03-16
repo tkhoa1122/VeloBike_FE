@@ -2,6 +2,9 @@
  * Environment Configuration
  * Centralized config for different environments
  */
+import { Platform } from 'react-native';
+
+const DEV_API_HOST = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
 
 export const ENV = {
   // Environment detection
@@ -9,7 +12,7 @@ export const ENV = {
   
   // API Configuration
   API_BASE_URL: __DEV__ 
-    ? 'http://localhost:5000/api'
+    ? `http://${DEV_API_HOST}:5000/api`
     : 'https://api.velobike.com/api',
     
   // Frontend URL
@@ -42,7 +45,7 @@ export const ENV = {
     
   // Socket.io
   SOCKET_URL: __DEV__
-    ? 'http://localhost:5000'
+    ? `http://${DEV_API_HOST}:5000`
     : 'https://api.velobike.com',
     
   // Cloudinary (for image uploads)

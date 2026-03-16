@@ -45,35 +45,50 @@ export class OrderApiClient extends BaseApiClient {
    * Cancel order
    */
   async cancelOrder(orderId: string, reason: string): Promise<{ success: boolean; message: string }> {
-    return this.post(`/orders/${orderId}/cancel`, { reason });
+    return this.put(ENDPOINTS.ORDERS.UPDATE_STATUS(orderId), {
+      status: 'CANCELLED',
+      note: reason,
+    });
   }
 
   /**
    * Buyer: Confirm delivery
    */
   async confirmDelivery(orderId: string): Promise<{ success: boolean; message: string }> {
-    return this.post(`/orders/${orderId}/confirm-delivery`);
+    return this.put(ENDPOINTS.ORDERS.UPDATE_STATUS(orderId), {
+      status: 'COMPLETED',
+      note: 'Buyer confirmed delivery',
+    });
   }
 
   /**
    * Buyer: Request return
    */
   async requestReturn(orderId: string, reason: string): Promise<{ success: boolean; message: string }> {
-    return this.post(`/orders/${orderId}/request-return`, { reason });
+    return this.post(ENDPOINTS.ORDERS.TRANSITION(orderId), {
+      newState: 'DISPUTED',
+      note: reason,
+    });
   }
 
   /**
    * Seller: Accept order
    */
   async acceptOrder(orderId: string): Promise<{ success: boolean; message: string }> {
-    return this.post(`/orders/${orderId}/accept`);
+    return this.post(ENDPOINTS.ORDERS.TRANSITION(orderId), {
+      newState: 'ESCROW_LOCKED',
+      note: 'Seller accepted order',
+    });
   }
 
   /**
    * Seller: Decline order
    */
   async declineOrder(orderId: string, reason: string): Promise<{ success: boolean; message: string }> {
-    return this.post(`/orders/${orderId}/decline`, { reason });
+    return this.put(ENDPOINTS.ORDERS.UPDATE_STATUS(orderId), {
+      status: 'CANCELLED',
+      note: reason,
+    });
   }
 
   /**
@@ -84,14 +99,20 @@ export class OrderApiClient extends BaseApiClient {
     trackingNumber: string;
     estimatedDelivery?: Date;
   }): Promise<{ success: boolean; message: string }> {
-    return this.post(`/orders/${orderId}/ship`, trackingInfo);
+    return this.put(ENDPOINTS.ORDERS.UPDATE_STATUS(orderId), {
+      status: 'SHIPPING',
+      trackingInfo,
+    });
   }
 
   /**
    * Inspector: Accept inspection
    */
   async acceptInspection(orderId: string): Promise<{ success: boolean; message: string }> {
-    return this.post(`/orders/${orderId}/accept-inspection`);
+    return this.post(ENDPOINTS.ORDERS.TRANSITION(orderId), {
+      newState: 'IN_INSPECTION',
+      note: 'Inspection accepted',
+    });
   }
 
   /**
@@ -121,7 +142,7 @@ export class OrderApiClient extends BaseApiClient {
       }>;
     };
   }> {
-    return this.get(`/orders/${orderId}/tracking`);
+    return this.get(ENDPOINTS.ORDERS.TIMELINE(orderId));
   }
 
   /**
@@ -137,7 +158,28 @@ export class OrderApiClient extends BaseApiClient {
       statusBreakdown: Record<string, number>;
     };
   }> {
-    return this.get('/orders/stats', { period });
+    return this.get('/dashboard/seller/performance', { period });
+  }
+
+  /**
+   * Get order timeline
+   */
+  async getOrderTimeline(orderId: string): Promise<{ success: boolean; data: any[] }> {
+    return this.get(ENDPOINTS.ORDERS.TIMELINE(orderId));
+  }
+
+  /**
+   * Update shipping address for buyer
+   */
+  async updateShippingAddress(orderId: string, shippingAddress: Record<string, any>): Promise<{ success: boolean; message?: string; data?: any }> {
+    return this.put(ENDPOINTS.ORDERS.UPDATE_SHIPPING_ADDRESS(orderId), shippingAddress);
+  }
+
+  /**
+   * Get escrow status
+   */
+  async getEscrowStatus(orderId: string): Promise<{ success: boolean; data: any }> {
+    return this.get(ENDPOINTS.ORDERS.ESCROW_STATUS(orderId));
   }
 
   /**

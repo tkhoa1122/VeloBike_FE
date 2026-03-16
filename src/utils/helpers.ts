@@ -24,7 +24,7 @@ export const debounce = <T extends (...args: any[]) => any>(
   func: T,
   wait: number
 ): (...args: Parameters<T>) => void => {
-  let timeout: NodeJS.Timeout;
+  let timeout: ReturnType<typeof setTimeout>;
   
   return (...args: Parameters<T>) => {
     clearTimeout(timeout);
@@ -157,24 +157,26 @@ export const bytesToSize = (bytes: number): string => {
  * Check if device is mobile
  */
 export const isMobile = (): boolean => {
-  if (typeof window === 'undefined') return false;
-  return window.innerWidth <= 768;
+  const maybeWindow = (globalThis as { window?: { innerWidth?: number } }).window;
+  return typeof maybeWindow?.innerWidth === 'number' ? maybeWindow.innerWidth <= 768 : false;
 };
 
 /**
  * Check if device is tablet
  */
 export const isTablet = (): boolean => {
-  if (typeof window === 'undefined') return false;
-  return window.innerWidth > 768 && window.innerWidth <= 1024;
+  const maybeWindow = (globalThis as { window?: { innerWidth?: number } }).window;
+  if (typeof maybeWindow?.innerWidth !== 'number') return false;
+  return maybeWindow.innerWidth > 768 && maybeWindow.innerWidth <= 1024;
 };
 
 /**
  * Check if device supports touch
  */
 export const isTouchDevice = (): boolean => {
-  if (typeof window === 'undefined') return false;
-  return 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+  const maybeWindow = (globalThis as { window?: Record<string, unknown> }).window;
+  const maybeNavigator = (globalThis as { navigator?: { maxTouchPoints?: number } }).navigator;
+  return !!maybeWindow && ('ontouchstart' in maybeWindow || (maybeNavigator?.maxTouchPoints ?? 0) > 0);
 };
 
 /**

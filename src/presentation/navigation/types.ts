@@ -39,6 +39,12 @@ export type MainTabParamList = {
 export type HomeStackParamList = {
   Home: undefined;
   ListingDetail: { listingId: string };
+  CreateOrder: { listingId: string };
+  Payment: { orderId: string };
+  PaymentWebView: { paymentLink: string; orderCode: number; orderId: string };
+  PaymentSuccess: { orderId: string };
+  Orders: undefined;
+  OrderDetail: { orderId: string };
   Chat: { conversationId?: string; participantName: string; participantAvatar?: string; listingTitle?: string; listingImage?: string };
   Notifications: undefined;
 };
@@ -49,6 +55,12 @@ export type HomeStackParamList = {
 export type SearchStackParamList = {
   Search: undefined;
   ListingDetail: { listingId: string };
+  CreateOrder: { listingId: string };
+  Payment: { orderId: string };
+  PaymentWebView: { paymentLink: string; orderCode: number; orderId: string };
+  PaymentSuccess: { orderId: string };
+  Orders: undefined;
+  OrderDetail: { orderId: string };
   Chat: { conversationId?: string; participantName: string; participantAvatar?: string; listingTitle?: string; listingImage?: string };
 };
 
@@ -66,6 +78,7 @@ export type MessagesStackParamList = {
 export type ProfileStackParamList = {
   Profile: undefined;
   EditProfile: undefined;
+  KycVerification: undefined;
   Orders: undefined;
   OrderDetail: { orderId: string };
   Notifications: undefined;

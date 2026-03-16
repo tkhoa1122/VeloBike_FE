@@ -41,10 +41,13 @@ import {
 } from '../../../config/theme';
 import { useAuthStore } from '../../viewmodels/AuthStore';
 import { Button } from '../../components/common/Button';
+import { container } from '../../../di/Container';
+import Toast from 'react-native-toast-message';
 
 interface ProfileScreenProps {
   onLogout?: () => void;
   onEditProfile?: () => void;
+  onKycVerification?: () => void;
   onOrders?: () => void;
   onNotifications?: () => void;
   onSettings?: () => void;
@@ -53,6 +56,7 @@ interface ProfileScreenProps {
 export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   onLogout,
   onEditProfile,
+  onKycVerification,
   onOrders,
   onNotifications,
   onSettings,
@@ -69,6 +73,60 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
     await logout();
     onLogout?.();
   }, [logout, onLogout]);
+
+  const handleUpgradeToSeller = useCallback(async () => {
+    try {
+      const result = await container().authApiClient.upgradeToSeller();
+      if (result.success) {
+        await useAuthStore.getState().getCurrentUser();
+        Toast.show({
+          type: 'success',
+          text1: 'Đăng ký bán hàng thành công',
+          text2: result.message || 'Bạn đã được nâng cấp tài khoản người bán',
+        });
+        return;
+      }
+
+      Toast.show({
+        type: 'error',
+        text1: 'Không thể đăng ký bán hàng',
+        text2: result.message || 'Vui lòng thử lại sau',
+      });
+    } catch (error) {
+      Toast.show({
+        type: 'error',
+        text1: 'Không thể đăng ký bán hàng',
+        text2: error instanceof Error ? error.message : 'Vui lòng thử lại sau',
+      });
+    }
+  }, []);
+
+  const handleCheckKycStatus = useCallback(async () => {
+    try {
+      const result = await container().authApiClient.getKYCStatus();
+      if (!result.success) {
+        Toast.show({
+          type: 'error',
+          text1: 'Không thể kiểm tra KYC',
+          text2: result.message || 'Vui lòng thử lại sau',
+        });
+        return;
+      }
+
+      const status = result.data?.status || 'PENDING';
+      Toast.show({
+        type: 'info',
+        text1: 'Trạng thái xác minh',
+        text2: `KYC hiện tại: ${status}`,
+      });
+    } catch (error) {
+      Toast.show({
+        type: 'error',
+        text1: 'Không thể kiểm tra KYC',
+        text2: error instanceof Error ? error.message : 'Vui lòng thử lại sau',
+      });
+    }
+  }, []);
 
   // Mock stats
   const stats = [
@@ -102,8 +160,8 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
     {
       title: 'Bán hàng',
       items: [
-        { icon: Store, label: 'Đăng ký bán hàng', onPress: () => {}, accent: true },
-        { icon: Award, label: 'Xác minh tài khoản', onPress: () => {} },
+        { icon: Store, label: 'Đăng ký bán hàng', onPress: handleUpgradeToSeller, accent: true },
+        { icon: Award, label: 'Xác minh tài khoản', onPress: onKycVerification ?? handleCheckKycStatus },
       ],
     },
     {

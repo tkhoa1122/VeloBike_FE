@@ -203,6 +203,7 @@ export interface ChatbotConversation {
 }
 
 export interface ChatbotMessage {
+  id?: string;
   role: 'USER' | 'ASSISTANT';
   content: string;
   timestamp: Date;

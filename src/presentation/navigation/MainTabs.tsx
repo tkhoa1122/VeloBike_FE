@@ -24,11 +24,17 @@ import { MessagesScreen } from '../screens/messages/MessagesScreen';
 import { ChatScreen } from '../screens/messages/ChatScreen';
 import { ProfileScreen } from '../screens/profile/ProfileScreen';
 import { EditProfileScreen } from '../screens/profile/EditProfileScreen';
+import KycSubmitScreen from '../screens/profile/KycSubmitScreen';
 import { ListingDetailScreen } from '../screens/listing/ListingDetailScreen';
 import { OrdersScreen } from '../screens/orders/OrdersScreen';
 import { OrderDetailScreen } from '../screens/orders/OrderDetailScreen';
+import CreateOrderScreen from '../screens/orders/CreateOrderScreen';
+import PaymentScreen from '../screens/orders/PaymentScreen';
+import PaymentWebViewScreen from '../screens/orders/PaymentWebViewScreen';
+import PaymentSuccessScreen from '../screens/orders/PaymentSuccessScreen';
 import { NotificationsScreen } from '../screens/notifications/NotificationsScreen';
 import { SettingsScreen } from '../screens/settings/SettingsScreen';
+import { useMessageStore } from '../viewmodels/MessageStore';
 
 import { COLORS, FONT_WEIGHTS, SHADOWS, SPACING, LAYOUT } from '../../config/theme';
 
@@ -55,7 +61,27 @@ const HomeStackScreen: React.FC = () => (
               participantAvatar: undefined,
             })
           }
-          onBuy={() => {}}
+          onBuy={(listingId) => navigation.navigate('CreateOrder', { listingId })}
+        />
+      )}
+    </HomeStack.Screen>
+    <HomeStack.Screen name="CreateOrder" component={CreateOrderScreen} />
+    <HomeStack.Screen name="Payment" component={PaymentScreen} />
+    <HomeStack.Screen name="PaymentWebView" component={PaymentWebViewScreen} />
+    <HomeStack.Screen name="PaymentSuccess" component={PaymentSuccessScreen} />
+    <HomeStack.Screen name="Orders">
+      {({ navigation }) => (
+        <OrdersScreen
+          onBack={() => navigation.goBack()}
+          onOrderPress={(id) => navigation.navigate('OrderDetail', { orderId: id })}
+        />
+      )}
+    </HomeStack.Screen>
+    <HomeStack.Screen name="OrderDetail">
+      {({ navigation, route }) => (
+        <OrderDetailScreen
+          orderId={route.params.orderId}
+          onBack={() => navigation.goBack()}
         />
       )}
     </HomeStack.Screen>
@@ -100,7 +126,27 @@ const SearchStackScreen: React.FC = () => (
               participantAvatar: undefined,
             })
           }
-          onBuy={() => {}}
+          onBuy={(listingId) => navigation.navigate('CreateOrder', { listingId })}
+        />
+      )}
+    </SearchStack.Screen>
+    <SearchStack.Screen name="CreateOrder" component={CreateOrderScreen} />
+    <SearchStack.Screen name="Payment" component={PaymentScreen} />
+    <SearchStack.Screen name="PaymentWebView" component={PaymentWebViewScreen} />
+    <SearchStack.Screen name="PaymentSuccess" component={PaymentSuccessScreen} />
+    <SearchStack.Screen name="Orders">
+      {({ navigation }) => (
+        <OrdersScreen
+          onBack={() => navigation.goBack()}
+          onOrderPress={(id) => navigation.navigate('OrderDetail', { orderId: id })}
+        />
+      )}
+    </SearchStack.Screen>
+    <SearchStack.Screen name="OrderDetail">
+      {({ navigation, route }) => (
+        <OrderDetailScreen
+          orderId={route.params.orderId}
+          onBack={() => navigation.goBack()}
         />
       )}
     </SearchStack.Screen>
@@ -161,6 +207,7 @@ const ProfileStackScreen: React.FC<ProfileStackScreenProps> = ({ onLogout }) => 
         <ProfileScreen
           onLogout={onLogout}
           onEditProfile={() => navigation.navigate('EditProfile')}
+          onKycVerification={() => navigation.navigate('KycVerification')}
           onOrders={() => navigation.navigate('Orders')}
           onNotifications={() => navigation.navigate('Notifications')}
           onSettings={() => navigation.navigate('Settings')}
@@ -173,6 +220,11 @@ const ProfileStackScreen: React.FC<ProfileStackScreenProps> = ({ onLogout }) => 
           onBack={() => navigation.goBack()}
           onSave={() => navigation.goBack()}
         />
+      )}
+    </ProfileStack.Screen>
+    <ProfileStack.Screen name="KycVerification">
+      {({ navigation }) => (
+        <KycSubmitScreen onBack={() => navigation.goBack()} />
       )}
     </ProfileStack.Screen>
     <ProfileStack.Screen name="Orders">
@@ -210,6 +262,14 @@ interface MainTabsProps {
 }
 
 export const MainTabs: React.FC<MainTabsProps> = ({ onLogout }) => {
+  const { conversations, getConversations } = useMessageStore();
+
+  React.useEffect(() => {
+    getConversations();
+  }, [getConversations]);
+
+  const unreadCount = conversations.reduce((total, conversation) => total + (conversation.unreadCount || 0), 0);
+
   return (
     <Tab.Navigator
       screenOptions={{
@@ -254,7 +314,7 @@ export const MainTabs: React.FC<MainTabsProps> = ({ onLogout }) => {
         options={{
           tabBarLabel: 'Tin nhắn',
           tabBarIcon: ({ color, size }) => <MessageCircle size={size} color={color} />,
-          tabBarBadge: 3, // TODO: dynamic badge count
+          tabBarBadge: unreadCount > 0 ? unreadCount : undefined,
         }}
       />
 

@@ -36,7 +36,10 @@ import {
 } from '../../../config/theme';
 import { useMessageStore } from '../../viewmodels/MessageStore';
 import { useAuthStore } from '../../viewmodels/AuthStore';
+import { useUploadStore } from '../../viewmodels/UploadStore';
+import { useImagePicker } from '../../hooks/useImagePicker';
 import type { MessageEntry } from '../../../data/repositories/MessageRepositoryImpl';
+import Toast from 'react-native-toast-message';
 
 interface ChatScreenProps {
   conversationId?: string;
@@ -58,8 +61,11 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
   const insets = useSafeAreaInsets();
   const { currentMessages, getMessages, sendMessage: storeSendMessage } = useMessageStore();
   const { user } = useAuthStore();
+  const { uploadFile } = useUploadStore();
+  const { showImagePicker, toUploadFileData } = useImagePicker({ maxFiles: 5, quality: 0.7 });
   const currentUserId = user?._id ?? '';
   const [inputText, setInputText] = useState('');
+  const [uploadingImage, setUploadingImage] = useState(false);
   const flatListRef = useRef<FlatList>(null);
 
   useEffect(() => {
@@ -77,6 +83,49 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
       content: text,
     });
   }, [inputText, conversationId, storeSendMessage]);
+
+  const handleImagePick = useCallback(async () => {
+    if (!conversationId) return;
+    
+    setUploadingImage(true);
+    try {
+      const pickedImages = await showImagePicker(true); // Allow multiple
+      if (pickedImages.length === 0) {
+        setUploadingImage(false);
+        return;
+      }
+
+      // Upload images one by one
+      for (const image of pickedImages) {
+        const uploadData = toUploadFileData([image]);
+        const url = await uploadFile(uploadData[0]);
+        
+        if (url) {
+          // Send image URL as message
+          await storeSendMessage({
+            conversationId,
+            receiverId: '',
+            content: `[Image]: ${url}`,
+            attachments: [url],
+          });
+        }
+      }
+
+      Toast.show({
+        type: 'success',
+        text1: 'Gửi ảnh thành công',
+        text2: `Đã gửi ${pickedImages.length} ảnh`,
+      });
+    } catch (error) {
+      Toast.show({
+        type: 'error',
+        text1: 'Lỗi gửi ảnh',
+        text2: error instanceof Error ? error.message : 'Vui lòng thử lại',
+      });
+    } finally {
+      setUploadingImage(false);
+    }
+  }, [conversationId, showImagePicker, toUploadFileData, uploadFile, storeSendMessage]);
 
   const formatMsgTime = (date: Date) => {
     return new Date(date).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
@@ -175,24 +224,29 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
 
         {/* Input bar */}
         <View style={[styles.inputBar, { paddingBottom: insets.bottom + SPACING.sm }]}>
-          <TouchableOpacity style={styles.attachBtn}>
-            <ImageIcon size={22} color={COLORS.primary} />
+          <TouchableOpacity 
+            style={styles.attachBtn}
+            onPress={handleImagePick}
+            disabled={uploadingImage}
+          >
+            <ImageIcon size={22} color={uploadingImage ? COLORS.textLight : COLORS.primary} />
           </TouchableOpacity>
           <View style={styles.inputWrap}>
             <TextInput
               style={styles.textInput}
-              placeholder="Nhập tin nhắn..."
+              placeholder={uploadingImage ? "Đang gửi ảnh..." : "Nhập tin nhắn..."}
               placeholderTextColor={COLORS.textLight}
               value={inputText}
               onChangeText={setInputText}
               multiline
               maxLength={1000}
+              editable={!uploadingImage}
             />
           </View>
           <TouchableOpacity
             style={[styles.sendBtn, inputText.trim().length > 0 && styles.sendBtnActive]}
             onPress={handleSend}
-            disabled={!inputText.trim()}
+            disabled={!inputText.trim() || uploadingImage}
           >
             <Send size={20} color={inputText.trim() ? COLORS.white : COLORS.textLight} />
           </TouchableOpacity>

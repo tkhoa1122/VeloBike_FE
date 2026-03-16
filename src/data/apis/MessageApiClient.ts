@@ -98,4 +98,39 @@ export class MessageApiClient extends BaseApiClient {
   async markAsRead(messageId: string): Promise<{ success: boolean; message: string }> {
     return this.put(ENDPOINTS.MESSAGES.MARK_READ(messageId));
   }
+
+  /**
+   * Get unread message summary
+   */
+  async getUnreadCount(): Promise<{ success: boolean; data?: { unreadCount: number } }> {
+    return this.get('/messages/unread');
+  }
+
+  /**
+   * Delete one message
+   */
+  async deleteMessage(messageId: string): Promise<{ success: boolean; message?: string }> {
+    return this.delete(`/messages/${messageId}`);
+  }
+
+  /**
+   * Close conversation
+   */
+  async closeConversation(conversationId: string): Promise<{ success: boolean; message?: string }> {
+    return this.put(`/messages/conversation/${conversationId}/close`);
+  }
+
+  /**
+   * Send chatbot message
+   */
+  async sendChatbotMessage(data: { message: string; context?: Record<string, any> }): Promise<{ success: boolean; reply?: string; data?: { reply?: string } }> {
+    return this.post(ENDPOINTS.CHATBOT.MESSAGE, data);
+  }
+
+  /**
+   * Get chatbot history
+   */
+  async getChatbotHistory(params?: { page?: number; limit?: number }): Promise<{ success: boolean; data: any[]; totalPages?: number; currentPage?: number }> {
+    return this.get(ENDPOINTS.CHATBOT.HISTORY, params);
+  }
 }

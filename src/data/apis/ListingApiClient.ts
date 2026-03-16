@@ -105,7 +105,7 @@ export class ListingApiClient extends BaseApiClient {
    * Get recommended listings for user
    */
   async getRecommendedListings(limit: number = 10): Promise<{ success: boolean; data: ListingModel[] }> {
-    return this.get('/recommendations/listings', { limit });
+    return this.get('/recommendations/bikes', { limit });
   }
 
   /**
@@ -142,7 +142,7 @@ export class ListingApiClient extends BaseApiClient {
    * Get popular search terms
    */
   async getPopularSearches(): Promise<{ success: boolean; data: string[] }> {
-    return this.get('/search/popular');
+    return this.get('/listings/search/suggestions');
   }
 
   /**

@@ -1,5 +1,6 @@
 import { MessageApiClient, ConversationResponseModel, MessageResponseModel } from '../apis/MessageApiClient';
 import { ApiResponse, PaginatedResponse } from '../../domain/entities/Common';
+import { ChatbotConversation, ChatbotMessage, SendChatbotMessageData } from '../../domain/entities/Message';
 
 // Presentation-friendly models
 export interface ConversationEntry {
@@ -116,6 +117,55 @@ export class MessageRepositoryImpl {
     }
   }
 
+  async sendChatbotMessage(data: SendChatbotMessageData): Promise<ApiResponse<{ reply: string }>> {
+    try {
+      const response = await this.messageApiClient.sendChatbotMessage(data);
+      const reply = response.reply || response.data?.reply;
+
+      if (response.success && reply) {
+        return {
+          success: true,
+          data: { reply },
+          message: 'Chatbot replied',
+        };
+      }
+
+      return { success: false, message: 'Chatbot không phản hồi' };
+    } catch (error) {
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : 'Không thể gửi tin nhắn chatbot',
+      };
+    }
+  }
+
+  async getChatbotHistory(page: number = 1, limit: number = 50): Promise<PaginatedResponse<ChatbotConversation>> {
+    try {
+      const response = await this.messageApiClient.getChatbotHistory({ page, limit });
+      const conversations = Array.isArray(response.data)
+        ? response.data.map((item) => this.mapChatbotConversation(item))
+        : [];
+
+      return {
+        success: response.success,
+        data: conversations,
+        page: response.currentPage ?? page,
+        currentPage: response.currentPage ?? page,
+        totalPages: response.totalPages ?? 1,
+        count: conversations.length,
+      };
+    } catch {
+      return {
+        success: false,
+        data: [],
+        page,
+        currentPage: page,
+        totalPages: 0,
+        count: 0,
+      };
+    }
+  }
+
   // =========================================================================
   // MAPPERS
   // =========================================================================
@@ -148,6 +198,36 @@ export class MessageRepositoryImpl {
       attachments: model.attachments,
       timestamp: new Date(model.timestamp),
       readStatus: model.readStatus,
+    };
+  }
+
+  private mapChatbotConversation(model: any): ChatbotConversation {
+    return {
+      _id: String(model?._id || Date.now()),
+      userId: String(model?.userId || ''),
+      messages: Array.isArray(model?.messages)
+        ? model.messages.map((message: any) => this.mapChatbotMessage(message))
+        : [],
+      context: {
+        userQueries: Array.isArray(model?.context?.userQueries) ? model.context.userQueries : [],
+        userProfile: model?.context?.userProfile,
+        currentListingContext: model?.context?.currentListingContext,
+      },
+      isActive: Boolean(model?.isActive),
+      createdAt: model?.createdAt ? new Date(model.createdAt) : new Date(),
+      updatedAt: model?.updatedAt ? new Date(model.updatedAt) : new Date(),
+    };
+  }
+
+  private mapChatbotMessage(model: any): ChatbotMessage {
+    return {
+      id: String(model?._id || model?.id || Date.now()),
+      role: model?.role === 'USER' ? 'USER' : 'ASSISTANT',
+      content: String(model?.content || ''),
+      timestamp: model?.timestamp ? new Date(model.timestamp) : new Date(),
+      confidence: typeof model?.confidence === 'number' ? model.confidence : undefined,
+      suggestedActions: Array.isArray(model?.suggestedActions) ? model.suggestedActions : undefined,
+      wasHelpful: typeof model?.wasHelpful === 'boolean' ? model.wasHelpful : undefined,
     };
   }
 }

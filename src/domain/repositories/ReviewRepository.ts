@@ -1,35 +1,49 @@
-import { 
-  Review, 
-  CreateReviewData,
-  UpdateReviewData,
-  ReviewSearchParams,
-  ReviewStats,
-  ReviewResponseData,
-  ReportReviewData 
-} from '../entities/Review';
-import { ApiResponse, PaginatedResponse } from '../entities/Common';
+import { ApiResponse } from '../entities/Common';
+import { Review, CreateReviewData, ReviewSearchParams, ReviewStats } from '../entities/Review';
 
 export interface ReviewRepository {
-  // Review CRUD
+  /**
+   * Create a new review
+   */
   createReview(data: CreateReviewData): Promise<ApiResponse<Review>>;
-  getReview(reviewId: string): Promise<ApiResponse<Review>>;
-  updateReview(reviewId: string, data: UpdateReviewData): Promise<ApiResponse<Review>>;
+
+  /**
+   * Get reviews for a user (seller)
+   */
+  getReviewsForUser(params: ReviewSearchParams): Promise<ApiResponse<{
+    reviews: Review[];
+    stats: ReviewStats;
+    totalPages: number;
+    currentPage: number;
+  }>>;
+
+  /**
+   * Get review by ID
+   */
+  getReviewById(id: string): Promise<ApiResponse<Review>>;
+
+  /**
+   * Mark review as helpful/not helpful
+   */
+  voteReview(reviewId: string, helpful: boolean): Promise<ApiResponse>;
+
+  /**
+   * Seller response to review
+   */
+  respondToReview(reviewId: string, response: string): Promise<ApiResponse>;
+
+  /**
+   * Get buyer's own reviews
+   */
+  getMyReviews(page?: number, limit?: number): Promise<ApiResponse<Review[]>>;
+
+  /**
+   * Update review (within 24 hours)
+   */
+  updateReview(reviewId: string, data: Partial<CreateReviewData>): Promise<ApiResponse<Review>>;
+
+  /**
+   * Delete review
+   */
   deleteReview(reviewId: string): Promise<ApiResponse>;
-  
-  // Get reviews
-  getReviews(params: ReviewSearchParams): Promise<PaginatedResponse<Review>>;
-  getUserReviews(userId: string, params?: ReviewSearchParams): Promise<PaginatedResponse<Review>>;
-  getMyReviews(params?: ReviewSearchParams): Promise<PaginatedResponse<Review>>;
-  
-  // Review statistics
-  getReviewStats(userId: string): Promise<ApiResponse<ReviewStats>>;
-  
-  // Review interactions
-  respondToReview(data: ReviewResponseData): Promise<ApiResponse<Review>>;
-  reportReview(data: ReportReviewData): Promise<ApiResponse>;
-  likeReview(reviewId: string): Promise<ApiResponse>;
-  unlikeReview(reviewId: string): Promise<ApiResponse>;
-  
-  // Verification
-  verifyReview(reviewId: string): Promise<ApiResponse>;
 }

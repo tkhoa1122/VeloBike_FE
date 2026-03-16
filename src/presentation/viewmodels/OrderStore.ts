@@ -47,12 +47,15 @@ export const useOrderStore = create<OrderState>((set, get) => ({
       const repo = container().orderRepository;
       const result = await repo.getMyOrders(params);
       if (result.success) {
+        const data = result.data ?? [];
+        const currentPage = result.page ?? result.currentPage ?? 1;
+        const totalPages = result.totalPages ?? 1;
         set({
-          orders: result.data,
-          currentPage: result.page,
-          totalPages: result.totalPages,
-          totalCount: result.count,
-          hasMore: result.page < result.totalPages,
+          orders: data,
+          currentPage,
+          totalPages,
+          totalCount: result.count ?? data.length,
+          hasMore: currentPage < totalPages,
           loadingState: 'success',
         });
       } else {
@@ -64,20 +67,23 @@ export const useOrderStore = create<OrderState>((set, get) => ({
   },
 
   loadMoreOrders: async (): Promise<void> => {
-    const { lastParams, hasMore, loadingState, currentPage } = get();
+    const { lastParams, hasMore, loadingState, currentPage: currentPageState } = get();
     if (!hasMore || loadingState === 'loading' || !lastParams) return;
     
-    const nextParams = { ...lastParams, page: currentPage + 1 };
+    const nextParams = { ...lastParams, page: currentPageState + 1 };
     set({ loadingState: 'loading' });
     try {
       const repo = container().orderRepository;
       const result = await repo.getMyOrders(nextParams);
       if (result.success) {
+        const data = result.data ?? [];
+        const currentPage = result.page ?? result.currentPage ?? currentPageState;
+        const totalPages = result.totalPages ?? get().totalPages;
         set(s => ({
-          orders: [...s.orders, ...result.data],
-          currentPage: result.page,
-          totalPages: result.totalPages,
-          hasMore: result.page < result.totalPages,
+          orders: [...s.orders, ...data],
+          currentPage,
+          totalPages,
+          hasMore: currentPage < totalPages,
           loadingState: 'success',
         }));
       } else {

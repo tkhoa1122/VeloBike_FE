@@ -60,12 +60,15 @@ export const useListingStore = create<ListingState>((set, get) => ({
       const result = await useCase.getListings().execute(params);
       
       if (result.success) {
+        const data = result.data ?? [];
+        const currentPage = result.page ?? result.currentPage ?? 1;
+        const totalPages = result.totalPages ?? 1;
         set({
-          listings: result.data,
-          currentPage: result.page,
-          totalPages: result.totalPages,
-          totalCount: result.count,
-          hasMore: result.page < result.totalPages,
+          listings: data,
+          currentPage,
+          totalPages,
+          totalCount: result.count ?? data.length,
+          hasMore: currentPage < totalPages,
           loadingState: 'success',
           error: null
         });
@@ -84,7 +87,7 @@ export const useListingStore = create<ListingState>((set, get) => ({
   },
 
   loadMoreListings: async (): Promise<void> => {
-    const { lastSearchParams, hasMore, loadingState, currentPage } = get();
+    const { lastSearchParams, hasMore, loadingState, currentPage: currentPageState } = get();
     
     if (!hasMore || loadingState === 'loading' || !lastSearchParams) {
       return;
@@ -92,7 +95,7 @@ export const useListingStore = create<ListingState>((set, get) => ({
     
     const nextPageParams = {
       ...lastSearchParams,
-      page: currentPage + 1
+      page: currentPageState + 1
     };
     
     set({ loadingState: 'loading' });
@@ -101,11 +104,14 @@ export const useListingStore = create<ListingState>((set, get) => ({
       const result = await useCase.getListings().execute(nextPageParams);
       
       if (result.success) {
+        const data = result.data ?? [];
+        const currentPage = result.page ?? result.currentPage ?? currentPageState;
+        const totalPages = result.totalPages ?? get().totalPages;
         set(state => ({
-          listings: [...state.listings, ...result.data],
-          currentPage: result.page,
-          totalPages: result.totalPages,
-          hasMore: result.page < result.totalPages,
+          listings: [...state.listings, ...data],
+          currentPage,
+          totalPages,
+          hasMore: currentPage < totalPages,
           loadingState: 'success',
           error: null
         }));
