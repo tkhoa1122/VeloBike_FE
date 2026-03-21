@@ -193,28 +193,58 @@ export default function KycSubmitScreen({ onBack }: KycSubmitScreenProps) {
         setSubmitting(false);
         
         try {
-          console.log('KYC already verified, upgrading to seller...');
+          console.log('🔄 KYC already verified, auto-upgrading to seller...');
           const upgradeResult = await container().authApiClient.upgradeToSeller();
           
           // Refresh user immediately to get new role
           const getCurrentUser = useAuthStore.getState().getCurrentUser as any;
           await getCurrentUser(false, true);
 
-          Toast.show({
-            type: 'success',
-            text1: 'Lên cấp thành công',
-            text2: 'Bạn đã trở thành người bán hàng.',
-          });
+          // Check if role actually updated
+          const updatedUser = useAuthStore.getState().user;
+          const isNowSeller = updatedUser?.role === 'SELLER';
+          
+          if (isNowSeller) {
+            Toast.show({
+              type: 'success',
+              text1: 'Lên cấp thành công',
+              text2: 'Bạn đã trở thành người bán hàng.',
+            });
+            onBack?.();
+          } else {
+            // Role not updated - backend might have failed
+            console.warn('⚠️ Role not updated after upgrade call');
+            Toast.show({
+              type: 'success',
+              text1: 'KYC đã được xét duyệt',
+              text2: 'Vui lòng quay lại để hoàn tất đăng ký bán hàng.',
+            });
+            onBack?.();
+          }
         } catch (err) {
-          console.error('Upgrade failed:', err);
-          Toast.show({
-            type: 'error',
-            text1: 'Lên cấp thất bại',
-            text2: 'Vui lòng thử lại hoặc liên hệ support.',
-          });
+          console.error('⚠️ Upgrade error:', err);
+          // Even if upgrade fails, try to refresh
+          const getCurrentUser = useAuthStore.getState().getCurrentUser as any;
+          await getCurrentUser(false, true);
+          
+          // Check if user is seller despite error
+          const currentUser = useAuthStore.getState().user;
+          if (currentUser?.role === 'SELLER') {
+            Toast.show({
+              type: 'success',
+              text1: 'Lên cấp thành công',
+              text2: 'Bạn đã trở thành người bán hàng.',
+            });
+          } else {
+            // Still buyer - don't show error, retry message
+            Toast.show({
+              type: 'info',
+              text1: 'KYC đã được xét duyệt',
+              text2: 'Vui lòng quay lại để hoàn tất.',
+            });
+          }
+          onBack?.();
         }
-        
-        onBack?.();
         return;
       }
 

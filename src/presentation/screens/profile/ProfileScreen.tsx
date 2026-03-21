@@ -70,6 +70,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   const { totalItems: wishlistCount } = useWishlistStore();
   const { unreadCount } = useNotificationStore();
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  const [upgradeInProgress, setUpgradeInProgress] = React.useState(false);
 
   useEffect(() => {
     Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }).start();
@@ -90,7 +91,17 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   }, []);
 
   const handleUpgradeToSeller = useCallback(async () => {
+    if (upgradeInProgress) {
+      Toast.show({
+        type: 'info',
+        text1: 'Đang cập nhật...',
+        text2: 'Vui lòng chờ một chút',
+      });
+      return;
+    }
+
     try {
+      setUpgradeInProgress(true);
       const kycStatus = await container().authApiClient.getKYCStatus();
       const status = kycStatus.data?.status;
       if (!kycStatus.success || status !== 'VERIFIED') {
@@ -102,6 +113,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
 
         // KYC is part of seller registration flow, not a standalone profile action.
         onKycVerification?.();
+        setUpgradeInProgress(false);
         return;
       }
 
@@ -114,6 +126,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
           text1: 'Đăng ký bán hàng thành công',
           text2: result.message || 'Bạn đã được nâng cấp tài khoản người bán',
         });
+        setUpgradeInProgress(false);
         return;
       }
 
@@ -122,14 +135,16 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
         text1: 'Không thể đăng ký bán hàng',
         text2: result.message || 'Vui lòng thử lại sau',
       });
+      setUpgradeInProgress(false);
     } catch (error) {
       Toast.show({
         type: 'error',
         text1: 'Không thể đăng ký bán hàng',
         text2: error instanceof Error ? error.message : 'Vui lòng thử lại sau',
       });
+      setUpgradeInProgress(false);
     }
-  }, []);
+  }, [upgradeInProgress]);
 
   // Real stats from stores
   const stats = [
