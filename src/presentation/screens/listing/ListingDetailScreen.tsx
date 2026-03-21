@@ -91,23 +91,6 @@ export const ListingDetailScreen: React.FC<ListingDetailScreenProps> = ({
     }
   }, [listingId, getListingById, checkInWishlist]);
 
-  if (!listing) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.background }}>
-        <StatusBar barStyle="dark-content" backgroundColor={COLORS.white} />
-        <Text style={{ color: COLORS.textLight }}>Đang tải...</Text>
-      </View>
-    );
-  }
-
-  const images = listing.media?.thumbnails ?? [];
-  const seller = listing.sellerId as any;
-  const discount = listing.pricing?.originalPrice
-    ? Math.round(
-        (1 - (listing.pricing.amount ?? 0) / listing.pricing.originalPrice) * 100,
-      )
-    : 0;
-
   const toggleSave = useCallback(() => {
     Animated.sequence([
       Animated.spring(heartScale, {
@@ -130,6 +113,7 @@ export const ListingDetailScreen: React.FC<ListingDetailScreenProps> = ({
 
   const handleShare = useCallback(async () => {
     try {
+      if (!listing) return;
       await Share.share({
         message: `${listing.title} - ${formatCurrency(listing.pricing?.amount ?? 0)} trên VeloBike`,
       });
@@ -155,6 +139,23 @@ export const ListingDetailScreen: React.FC<ListingDetailScreenProps> = ({
       </View>
     );
   };
+
+  if (!listing) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.background }}>
+        <StatusBar barStyle="dark-content" backgroundColor={COLORS.white} />
+        <Text style={{ color: COLORS.textLight }}>Đang tải...</Text>
+      </View>
+    );
+  }
+
+  const images = listing.media?.thumbnails ?? [];
+  const seller = listing.sellerId as any;
+  const discount = listing.pricing?.originalPrice
+    ? Math.round(
+        (1 - (listing.pricing.amount ?? 0) / listing.pricing.originalPrice) * 100,
+      )
+    : 0;
 
   return (
     <View style={styles.root}>

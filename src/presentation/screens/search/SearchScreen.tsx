@@ -67,6 +67,7 @@ export const SearchScreen: React.FC<SearchScreenProps> = ({ onListingPress }) =>
   const [priceMin, setPriceMin] = useState('');
   const [priceMax, setPriceMax] = useState('');
   const loading = loadingState === 'loading';
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -95,6 +96,23 @@ export const SearchScreen: React.FC<SearchScreenProps> = ({ onListingPress }) =>
       getListings({ page: 1, limit: 20, ...filters });
     }
   }, [query, selectedType, selectedCondition, selectedBrand, priceMin, priceMax, sortBy, searchListings, getListings]);
+
+  const scheduleSearch = useCallback(() => {
+    if (searchDebounceRef.current) {
+      clearTimeout(searchDebounceRef.current);
+    }
+    searchDebounceRef.current = setTimeout(() => {
+      handleSearch();
+    }, 250);
+  }, [handleSearch]);
+
+  useEffect(() => {
+    return () => {
+      if (searchDebounceRef.current) {
+        clearTimeout(searchDebounceRef.current);
+      }
+    };
+  }, []);
 
   const clearFilters = useCallback(() => {
     setSelectedType(null);
@@ -148,7 +166,7 @@ export const SearchScreen: React.FC<SearchScreenProps> = ({ onListingPress }) =>
         contentContainerStyle={styles.chipScroll}
       >
         {BIKE_TYPES.map(t => (
-          <TouchableOpacity key={t} style={[styles.chip, selectedType === t && styles.chipActive]} onPress={() => { setSelectedType(selectedType === t ? null : t); setTimeout(handleSearch, 0); }}>
+          <TouchableOpacity key={t} style={[styles.chip, selectedType === t && styles.chipActive]} onPress={() => { setSelectedType(selectedType === t ? null : t); scheduleSearch(); }}>
             <Text style={[styles.chipText, selectedType === t && styles.chipTextActive]}>{formatBikeType(t)}</Text>
           </TouchableOpacity>
         ))}

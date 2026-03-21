@@ -8,6 +8,7 @@ interface ListingState {
   listings: Listing[];
   featuredListings: Listing[];
   currentListing: Listing | null;
+  listingCache: Record<string, Listing>;
   
   // Pagination
   currentPage: number;
@@ -43,6 +44,7 @@ export const useListingStore = create<ListingState>((set, get) => ({
   listings: [],
   featuredListings: [],
   currentListing: null,
+  listingCache: {},
   currentPage: 1,
   totalPages: 1,
   totalCount: 0,
@@ -130,11 +132,23 @@ export const useListingStore = create<ListingState>((set, get) => ({
   },
 
   getListingById: async (id: string): Promise<Listing | null> => {
+    const cached = get().listingCache[id];
+    if (cached) {
+      set({ currentListing: cached });
+      return cached;
+    }
+
     try {
       const result = await useCase.listing().getListingById(id);
       
       if (result.success && result.data) {
-        set({ currentListing: result.data });
+        set(state => ({
+          currentListing: result.data,
+          listingCache: {
+            ...state.listingCache,
+            [id]: result.data!,
+          },
+        }));
         return result.data;
       }
       

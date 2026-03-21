@@ -105,12 +105,13 @@ export const useImagePicker = (options: UseImagePickerOptions = {}) => {
           text1: 'Không có quyền truy cập camera',
           text2: 'Vui lòng cấp quyền trong cài đặt',
         });
+        setLoading(false);
         return [];
       }
 
       const response = await launchCamera({
         mediaType: 'photo',
-        quality,
+        quality: quality || 0.8,
         maxWidth,
         maxHeight,
         includeBase64,
@@ -118,24 +119,28 @@ export const useImagePicker = (options: UseImagePickerOptions = {}) => {
       });
 
       if (response.didCancel) {
+        setLoading(false);
         return [];
       }
 
       if (response.errorCode) {
-        throw new Error(response.errorMessage || 'Camera error');
+        console.error('Camera error code:', response.errorCode, response.errorMessage);
+        throw new Error(response.errorMessage || 'Lỗi camera');
       }
 
-      return convertToPickedImages(response);
+      const images = convertToPickedImages(response);
+      setLoading(false);
+      return images;
     } catch (error) {
       console.error('Pick from camera error:', error);
+      const errorMsg = error instanceof Error ? error.message : 'Vui lòng thử lại';
       Toast.show({
         type: 'error',
         text1: 'Lỗi chụp ảnh',
-        text2: error instanceof Error ? error.message : 'Vui lòng thử lại',
+        text2: errorMsg,
       });
-      return [];
-    } finally {
       setLoading(false);
+      return [];
     }
   };
 

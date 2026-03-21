@@ -49,7 +49,16 @@ const stackScreenOptions = { headerShown: false, animation: 'slide_from_right' a
 // ─── Home Tab Stack ─────────────────────────────────────────────────────────
 const HomeStackScreen: React.FC = () => (
   <HomeStack.Navigator screenOptions={stackScreenOptions}>
-    <HomeStack.Screen name="Home" component={HomeScreen} />
+    <HomeStack.Screen name="Home">
+      {({ navigation }) => (
+        <HomeScreen
+          onSearch={() => navigation.getParent()?.navigate('SearchTab' as never)}
+          onNotifications={() => navigation.navigate('Notifications')}
+          onListingDetail={(id) => navigation.navigate('ListingDetail', { listingId: id })}
+          onCategoryPress={() => navigation.getParent()?.navigate('SearchTab' as never)}
+        />
+      )}
+    </HomeStack.Screen>
     <HomeStack.Screen name="ListingDetail">
       {({ navigation, route }) => (
         <ListingDetailScreen

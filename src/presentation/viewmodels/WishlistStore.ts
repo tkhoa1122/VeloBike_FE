@@ -70,8 +70,6 @@ export const useWishlistStore = create<WishlistState>((set, get) => ({
           wishlistCache: { ...s.wishlistCache, [listingId]: true },
           totalItems: s.totalItems + 1,
         }));
-        // Refresh list
-        get().getWishlist();
         return true;
       }
       return false;

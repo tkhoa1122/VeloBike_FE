@@ -42,6 +42,7 @@ import {
 import { useAuthStore } from '../../viewmodels/AuthStore';
 import { useListingStore } from '../../viewmodels/ListingStore';
 import { useNotificationStore } from '../../viewmodels/NotificationStore';
+import { useWishlistStore } from '../../viewmodels/WishlistStore';
 import type { Listing } from '../../../domain/entities/Listing';
 import { formatCurrency, formatBikeCondition } from '../../../utils/formatters';
 
@@ -104,6 +105,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   const { user } = useAuthStore();
   const { featuredListings, listings, getFeaturedListings, getListings, loadingState } = useListingStore();
   const { unreadCount } = useNotificationStore();
+  const { wishlistCache, getWishlist, addToWishlist, removeFromWishlist } = useWishlistStore();
 
   const [refreshing, setRefreshing] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -122,7 +124,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   useEffect(() => {
     getFeaturedListings(6);
     getListings({ page: 1, limit: 8 });
-  }, [getFeaturedListings, getListings]);
+    getWishlist({ page: 1, limit: 100 });
+  }, [getFeaturedListings, getListings, getWishlist]);
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -147,6 +150,16 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     if (h < 18) return 'Chào buổi chiều';
     return 'Chào buổi tối';
   };
+
+  const toggleWishlist = useCallback((listingId?: string) => {
+    if (!listingId) return;
+    const isSaved = wishlistCache[listingId] ?? false;
+    if (isSaved) {
+      removeFromWishlist(listingId);
+    } else {
+      addToWishlist(listingId);
+    }
+  }, [wishlistCache, addToWishlist, removeFromWishlist]);
 
   // ─── RENDER ─────────────────────────────────────────────────────────────────
   return (
@@ -242,7 +255,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.featuredList}
           keyExtractor={item => item._id}
-          renderItem={({ item }: { item: Listing }) => (
+          renderItem={({ item }: { item: Listing }) => {
+            const isSaved = item._id ? (wishlistCache[item._id] ?? false) : false;
+            return (
             <TouchableOpacity
               style={styles.featuredCard}
               activeOpacity={0.85}
@@ -257,8 +272,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                   </Text>
                 </View>
                 {/* Heart */}
-                <TouchableOpacity style={styles.heartBtn}>
-                  <Heart size={16} color={COLORS.white} />
+                <TouchableOpacity style={styles.heartBtn} onPress={() => toggleWishlist(item._id)}>
+                  <Heart size={16} color={COLORS.white} fill={isSaved ? COLORS.error : 'transparent'} />
                 </TouchableOpacity>
               </View>
               <View style={styles.featuredInfo}>
@@ -282,7 +297,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 </View>
               </View>
             </TouchableOpacity>
-          )}
+            );
+          }}
         />
 
         {/* ── RECOMMENDED ────────────────────────────── */}
@@ -293,7 +309,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           </TouchableOpacity>
         </View>
         <View style={styles.gridContainer}>
-          {listings.map((item: Listing) => (
+          {listings.map((item: Listing) => {
+            const isSaved = item._id ? (wishlistCache[item._id] ?? false) : false;
+            return (
             <TouchableOpacity
               key={item._id}
               style={styles.smallCard}
@@ -307,8 +325,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                     {conditionLabel(item.generalInfo?.condition ?? '')}
                   </Text>
                 </View>
-                <TouchableOpacity style={styles.heartBtnSm}>
-                  <Heart size={14} color={COLORS.white} />
+                <TouchableOpacity style={styles.heartBtnSm} onPress={() => toggleWishlist(item._id)}>
+                  <Heart size={14} color={COLORS.white} fill={isSaved ? COLORS.error : 'transparent'} />
                 </TouchableOpacity>
               </View>
               <View style={styles.smallInfo}>
@@ -322,7 +340,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 </View>
               </View>
             </TouchableOpacity>
-          ))}
+            );
+          })}
         </View>
 
         {/* ── PROMO BANNER ───────────────────────────── */}

@@ -7,6 +7,7 @@ import Toast from 'react-native-toast-message';
 import { COLORS } from '../../../config/theme';
 import { PickedImage, useImagePicker } from '../../hooks/useImagePicker';
 import { container } from '../../../di/Container';
+import { useAuthStore } from '../../viewmodels/AuthStore';
 
 interface KycSubmitScreenProps {
   onBack?: () => void;
@@ -51,19 +52,51 @@ export default function KycSubmitScreen({ onBack }: KycSubmitScreenProps) {
   const [idCardFront, setIdCardFront] = useState<PickedImage | undefined>();
   const [selfie, setSelfie] = useState<PickedImage | undefined>();
   const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [uploadingField, setUploadingField] = useState<'idCardFront' | 'selfie' | null>(null);
 
-  const { showImagePicker } = useImagePicker({ maxFiles: 1, quality: 1 });
+  const { pickFromCamera, pickFromLibrary } = useImagePicker({ maxFiles: 1 });
 
   const canSubmit = useMemo(() => !!idCardFront && !!selfie && !submitting, [idCardFront, selfie, submitting]);
+
+  const validateImage = (img: PickedImage, label: string): string | null => {
+    const allowed = ['image/jpeg', 'image/jpg', 'image/png'];
+    const mime = (img.type || '').toLowerCase();
+    if (!allowed.includes(mime)) {
+      return `${label} phải là ảnh JPG hoặc PNG.`;
+    }
+
+    if ((img.width ?? 0) < 600 || (img.height ?? 0) < 600) {
+      return `${label} quá nhỏ, vui lòng chọn ảnh rõ nét hơn.`;
+    }
+
+    return null;
+  };
+
+  const getKycFriendlyError = (raw?: string): string => {
+    const message = (raw || '').toLowerCase();
+    if (message.includes('face matching failed') || message.includes('face match')) {
+      return 'Khuôn mặt không khớp với CCCD. Vui lòng chụp selfie rõ mặt (không đeo khẩu trang/kính râm), đủ sáng và giữ ảnh CCCD rõ 4 góc.';
+    }
+    if (message.includes('no face') || message.includes('face not detected')) {
+      return 'Không nhận diện được khuôn mặt trong ảnh selfie. Vui lòng chụp lại ảnh rõ mặt.';
+    }
+    return raw || 'Vui lòng thử lại sau.';
+  };
 
   const pickAndUpload = async (field: 'idCardFront' | 'selfie') => {
     try {
       setUploadingField(field);
-      const images = await showImagePicker(false);
+      setSubmitError(null); // Clear previous errors when starting new upload
+      
+      // Both fields can use library (supports emulator testing)
+      const images = await pickFromLibrary(false);
+      
       if (!images.length) {
+        setUploadingField(null);
         return;
       }
+      
       const selectedImage = images[0];
 
       if (field === 'idCardFront') {
@@ -72,23 +105,53 @@ export default function KycSubmitScreen({ onBack }: KycSubmitScreenProps) {
         setSelfie(selectedImage);
       }
     } catch (error) {
+      console.error('Pick and upload error:', error);
+      const errorMsg = error instanceof Error ? error.message : 'Vui lòng thử lại';
       Toast.show({
         type: 'error',
-        text1: 'Không thể chọn ảnh',
-        text2: error instanceof Error ? error.message : 'Vui lòng thử lại',
+        text1: 'Lỗi tải ảnh',
+        text2: errorMsg,
       });
+      setSubmitError(errorMsg);
     } finally {
       setUploadingField(null);
     }
   };
 
   const handleSubmitKyc = async () => {
+    setSubmitError(null);
+
     if (!idCardFront || !selfie) {
       Toast.show({
         type: 'error',
         text1: 'Thiếu thông tin KYC',
         text2: 'Vui lòng tải lên đầy đủ ảnh CCCD và selfie.',
       });
+      setSubmitError('Vui lòng tải lên đầy đủ ảnh CCCD và ảnh selfie rõ mặt trước khi gửi.');
+      return;
+    }
+
+    if (idCardFront.uri === selfie.uri) {
+      Toast.show({
+        type: 'error',
+        text1: 'Ảnh KYC chưa hợp lệ',
+        text2: 'Ảnh CCCD và ảnh selfie phải là 2 ảnh khác nhau.',
+      });
+      setSubmitError('Ảnh CCCD và ảnh selfie đang trùng nhau. Vui lòng chụp selfie rõ mặt của bạn.');
+      return;
+    }
+
+    const idError = validateImage(idCardFront, 'Ảnh CCCD');
+    if (idError) {
+      Toast.show({ type: 'error', text1: 'Ảnh KYC chưa hợp lệ', text2: idError });
+      setSubmitError(idError);
+      return;
+    }
+
+    const selfieError = validateImage(selfie, 'Ảnh selfie');
+    if (selfieError) {
+      Toast.show({ type: 'error', text1: 'Ảnh KYC chưa hợp lệ', text2: selfieError });
+      setSubmitError(selfieError);
       return;
     }
 
@@ -106,27 +169,74 @@ export default function KycSubmitScreen({ onBack }: KycSubmitScreenProps) {
           type: selfie.type,
         },
       });
-      if (!result.success) {
+
+      // Handle "already verified" case - KYC is already approved
+      const isAlreadyVerified = (result.message || '').toLowerCase().includes('already verified');
+      if (!result.success && !isAlreadyVerified) {
+        const isFaceMatchingFailed = (result.message || '').toLowerCase().includes('face matching failed');
+        const friendly = getKycFriendlyError(result.message);
         Toast.show({
           type: 'error',
-          text1: 'Nộp KYC thất bại',
-          text2: result.message || 'Vui lòng thử lại sau',
+          text1: isFaceMatchingFailed ? 'Khuôn mặt chưa khớp CCCD' : 'Nộp KYC thất bại',
+          text2: friendly,
         });
+        setSubmitError(friendly);
+        setSubmitting(false);
         return;
       }
 
+      // Update AuthStore KYC status  
+      useAuthStore.getState().submitKycSuccess();
+
+      // If already verified, directly upgrade to seller
+      if (isAlreadyVerified) {
+        setSubmitting(false);
+        
+        try {
+          console.log('KYC already verified, upgrading to seller...');
+          const upgradeResult = await container().authApiClient.upgradeToSeller();
+          
+          // Refresh user immediately to get new role
+          const getCurrentUser = useAuthStore.getState().getCurrentUser as any;
+          await getCurrentUser(false, true);
+
+          Toast.show({
+            type: 'success',
+            text1: 'Lên cấp thành công',
+            text2: 'Bạn đã trở thành người bán hàng.',
+          });
+        } catch (err) {
+          console.error('Upgrade failed:', err);
+          Toast.show({
+            type: 'error',
+            text1: 'Lên cấp thất bại',
+            text2: 'Vui lòng thử lại hoặc liên hệ support.',
+          });
+        }
+        
+        onBack?.();
+        return;
+      }
+
+      // For new KYC submissions (not already verified), show pending status
       Toast.show({
         type: 'success',
         text1: 'Nộp KYC thành công',
         text2: 'Hồ sơ đã được gửi và đang chờ xét duyệt.',
       });
+      
+      setSubmitError(null);
       onBack?.();
     } catch (error) {
+      const rawMessage = error instanceof Error ? error.message : 'Vui lòng thử lại sau';
+      const friendly = getKycFriendlyError(rawMessage);
       Toast.show({
         type: 'error',
         text1: 'Nộp KYC thất bại',
-        text2: error instanceof Error ? error.message : 'Vui lòng thử lại sau',
+        text2: friendly,
       });
+      setSubmitError(friendly);
+      setSubmitting(false);
     } finally {
       setSubmitting(false);
     }
@@ -158,11 +268,17 @@ export default function KycSubmitScreen({ onBack }: KycSubmitScreenProps) {
         />
 
         <KycImageField
-          label="Ảnh selfie cầm CCCD"
+          label="Ảnh selfie rõ mặt"
           value={selfie?.uri}
           loading={uploadingField === 'selfie'}
           onPick={() => pickAndUpload('selfie')}
         />
+
+        {submitError ? (
+          <View style={tw`mt-1 mb-2 rounded-xl bg-red-50 border border-red-200 p-3`}>
+            <Text style={tw`text-sm text-red-700`}>{submitError}</Text>
+          </View>
+        ) : null}
       </ScrollView>
 
       <View style={tw`absolute bottom-0 left-0 right-0 px-4 py-3 border-t border-gray-200 bg-white`}>

@@ -204,7 +204,7 @@ export const VerifyEmailScreen: React.FC<VerifyEmailScreenProps> = ({
             ]}
           >
             <Button
-              title="Xác nhận"
+              title="Xác thực"
               onPress={handleVerify}
               loading={isLoading}
               disabled={otpCode.length !== 6}

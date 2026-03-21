@@ -28,6 +28,7 @@ import {
   FileText,
   Shield,
   Store,
+  ShieldCheck,
 } from 'lucide-react-native';
 import {
   COLORS,
@@ -79,6 +80,15 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
     onLogout?.();
   }, [logout, onLogout]);
 
+  const handleSwitchToBuyer = useCallback(async () => {
+    // Future implementation: toggle role or navigate to seller dashboard
+    Toast.show({
+      type: 'info',
+      text1: 'Chuyển đổi vai trò',
+      text2: 'Tính năng này sẽ được cập nhật sớm.',
+    });
+  }, []);
+
   const handleUpgradeToSeller = useCallback(async () => {
     try {
       const kycStatus = await container().authApiClient.getKYCStatus();
@@ -97,7 +107,8 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
 
       const result = await container().authApiClient.upgradeToSeller();
       if (result.success) {
-        await useAuthStore.getState().getCurrentUser();
+        const getCurrentUser = useAuthStore.getState().getCurrentUser as any;
+        await getCurrentUser(false, true);
         Toast.show({
           type: 'success',
           text1: 'Đăng ký bán hàng thành công',
@@ -140,37 +151,114 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
     items: MenuItem[];
   }
 
-  const menuSections: MenuSection[] = [
-    {
-      title: 'Giao dịch',
-      items: [
-        { icon: ShoppingBag, label: 'Đơn hàng của tôi', onPress: onOrders, badge: orderCount > 0 ? orderCount?.toString() : undefined },
-        { icon: Heart, label: 'Sản phẩm yêu thích', onPress: () => {} },
-        { icon: Star, label: 'Đánh giá của tôi', onPress: () => Toast.show({ type: 'info', text1: 'Tính năng sắp ra mắt', text2: 'Chức năng xem đánh giá sẽ được cập nhật' }) },
-      ],
-    },
-    {
-      title: 'Bán hàng',
-      items: [
+  // Build menu sections based on user role  
+  const buildMenuSections = (): MenuSection[] => {
+    const userRole = user?.role;
+    
+    // Seller mode: different menu
+    if (userRole === 'SELLER') {
+      return [
+        {
+          title: 'Giao dịch',
+          items: [
+            { icon: ShoppingBag, label: 'Đơn hàng của tôi', onPress: onOrders, badge: orderCount > 0 ? orderCount?.toString() : undefined },
+            { icon: Heart, label: 'Sản phẩm yêu thích', onPress: () => {} },
+            { icon: Star, label: 'Đánh giá của tôi', onPress: () => Toast.show({ type: 'info', text1: 'Tính năng sắp ra mắt', text2: 'Chức năng xem đánh giá sẽ được cập nhật' }) },
+          ],
+        },
+        {
+          title: 'Bán hàng',
+          items: [
+            { 
+              icon: Store, 
+              label: 'Chuyển sang mua hàng', 
+              onPress: handleSwitchToBuyer, 
+              accent: true 
+            },
+          ],
+        },
+        {
+          title: 'Cài đặt',
+          items: [
+            { icon: Bell, label: 'Thông báo', onPress: onNotifications, badge: unreadCount > 0 ? unreadCount?.toString() : undefined },
+            { icon: Settings, label: 'Cài đặt', onPress: onSettings },
+            { icon: Shield, label: 'Bảo mật & Quyền riêng tư', onPress: () => {} },
+          ],
+        },
+        {
+          title: 'Hỗ trợ',
+          items: [
+            { icon: HelpCircle, label: 'Trung tâm trợ giúp', onPress: () => {} },
+            { icon: FileText, label: 'Điều khoản sử dụng', onPress: () => {} },
+          ],
+        },
+      ];
+    }
+
+    // Buyer mode: original menu with seller upgrade option
+    const kycStatus = user?.kycStatus;
+    
+    let sellerSectionItems: MenuItem[] = [];
+    
+    if (kycStatus === 'pending') {
+      sellerSectionItems = [
+        { 
+          icon: ShieldCheck, 
+          label: 'Chờ xét duyệt KYC', 
+          onPress: () => Toast.show({ 
+            type: 'info', 
+            text1: 'Hồ sơ đang được xét duyệt',
+            text2: 'Bạn sẽ có thể đăng ký bán hàng khi KYC được phê duyệt.' 
+          }) 
+        },
+      ];
+    } else if (kycStatus === 'rejected') {
+      sellerSectionItems = [
+        { 
+          icon: Shield, 
+          label: 'Xác minh lại KYC', 
+          onPress: onKycVerification,
+          accent: true 
+        },
+      ];
+    } else {
+      sellerSectionItems = [
         { icon: Store, label: 'Đăng ký bán hàng', onPress: handleUpgradeToSeller, accent: true },
-      ],
-    },
-    {
-      title: 'Cài đặt',
-      items: [
-        { icon: Bell, label: 'Thông báo', onPress: onNotifications, badge: unreadCount > 0 ? unreadCount?.toString() : undefined },
-        { icon: Settings, label: 'Cài đặt', onPress: onSettings },
-        { icon: Shield, label: 'Bảo mật & Quyền riêng tư', onPress: () => {} },
-      ],
-    },
-    {
-      title: 'Hỗ trợ',
-      items: [
-        { icon: HelpCircle, label: 'Trung tâm trợ giúp', onPress: () => {} },
-        { icon: FileText, label: 'Điều khoản sử dụng', onPress: () => {} },
-      ],
-    },
-  ];
+      ];
+    }
+
+    return [
+      {
+        title: 'Giao dịch',
+        items: [
+          { icon: ShoppingBag, label: 'Đơn hàng của tôi', onPress: onOrders, badge: orderCount > 0 ? orderCount?.toString() : undefined },
+          { icon: Heart, label: 'Sản phẩm yêu thích', onPress: () => {} },
+          { icon: Star, label: 'Đánh giá của tôi', onPress: () => Toast.show({ type: 'info', text1: 'Tính năng sắp ra mắt', text2: 'Chức năng xem đánh giá sẽ được cập nhật' }) },
+        ],
+      },
+      {
+        title: 'Bán hàng',
+        items: sellerSectionItems,
+      },
+      {
+        title: 'Cài đặt',
+        items: [
+          { icon: Bell, label: 'Thông báo', onPress: onNotifications, badge: unreadCount > 0 ? unreadCount?.toString() : undefined },
+          { icon: Settings, label: 'Cài đặt', onPress: onSettings },
+          { icon: Shield, label: 'Bảo mật & Quyền riêng tư', onPress: () => {} },
+        ],
+      },
+      {
+        title: 'Hỗ trợ',
+        items: [
+          { icon: HelpCircle, label: 'Trung tâm trợ giúp', onPress: () => {} },
+          { icon: FileText, label: 'Điều khoản sử dụng', onPress: () => {} },
+        ],
+      },
+    ];
+  };
+
+  const menuSections = buildMenuSections();
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>

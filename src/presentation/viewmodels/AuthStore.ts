@@ -18,10 +18,12 @@ interface AuthState {
   verifyEmail: (email: string, code: string) => Promise<boolean>;
   resendVerification: (email: string) => Promise<boolean>;
   logout: () => Promise<void>;
-  getCurrentUser: (silent?: boolean) => Promise<void>;
+  getCurrentUser: (silent?: boolean, force?: boolean) => Promise<void>;
   forgotPassword: (email: string) => Promise<boolean>;
   updateProfile: (data: UpdateProfileData) => Promise<boolean>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<boolean>;
+  submitKycSuccess: () => void;
+  upgradeToSellerSuccess: (updatedUser?: User) => void;
   clearError: () => void;
   
   // UI helpers
@@ -212,10 +214,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
-  getCurrentUser: async (silent: boolean = false): Promise<void> => {
-    // Don't set loading if already loading or if already authenticated
+  getCurrentUser: async (silent: boolean = false, force: boolean = false): Promise<void> => {
+    // Don't set loading if already loading
     const { loadingState, isAuthenticated } = get();
-    if (loadingState === 'loading' || isAuthenticated) {
+    if (loadingState === 'loading') {
+      return;
+    }
+    
+    // Skip refresh if already authenticated and not forced
+    if (isAuthenticated && !force) {
       return;
     }
     
@@ -301,6 +308,34 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     } catch (error) {
       set({ loadingState: 'error', error: error instanceof Error ? error.message : 'Đổi mật khẩu thất bại' });
       return false;
+    }
+  },
+
+  // Update KYC status after successful submission
+  submitKycSuccess: (): void => {
+    const currentUser = get().user;
+    if (currentUser) {
+      set({
+        user: {
+          ...currentUser,
+          kycStatus: 'pending',
+        },
+      });
+    }
+  },
+
+  // Update user role to seller after upgrade
+  upgradeToSellerSuccess: (updatedUser?: User): void => {
+    const currentUser = get().user;
+    if (updatedUser) {
+      set({ user: updatedUser });
+    } else if (currentUser) {
+      set({
+        user: {
+          ...currentUser,
+          role: 'SELLER',
+        },
+      });
     }
   },
 
