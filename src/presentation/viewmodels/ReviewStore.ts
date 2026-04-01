@@ -20,7 +20,9 @@ interface ReviewState {
 
   // Actions
   createReview: (data: CreateReviewData) => Promise<boolean>;
-  getReviewsForUser: (userId: string, page?: number, limit?: number) => Promise<void>;
+  /** Buyer: đã gửi đánh giá cho đơn chưa */
+  checkOrderReviewed: (orderId: string) => Promise<boolean>;
+  getReviewsForUser: (userId: string, page?: number, limit?: number, listingId?: string) => Promise<void>;
   getMyReviews: (page?: number, limit?: number) => Promise<void>;
   voteReview: (reviewId: string, helpful: boolean) => Promise<boolean>;
   clearError: () => void;
@@ -54,7 +56,7 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
       } else {
         set({
           loadingState: 'error',
-          error: result.error || 'Không thể tạo đánh giá',
+          error: result.message || (result as { error?: string }).error || 'Không thể tạo đánh giá',
         });
         return false;
       }
@@ -65,7 +67,22 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
     }
   },
 
-  getReviewsForUser: async (userId: string, page: number = 1, limit: number = 20): Promise<void> => {
+  checkOrderReviewed: async (orderId: string): Promise<boolean> => {
+    try {
+      const repo = container().reviewRepository;
+      const result = await repo.checkReviewed(orderId);
+      return !!(result.success && result.data);
+    } catch {
+      return false;
+    }
+  },
+
+  getReviewsForUser: async (
+    userId: string,
+    page: number = 1,
+    limit: number = 20,
+    listingId?: string,
+  ): Promise<void> => {
     set({ loadingState: 'loading', error: null });
     try {
       const repo = container().reviewRepository;
@@ -73,6 +90,7 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
         userId,
         page,
         limit,
+        listingId,
       });
 
       if (result.success && result.data) {
@@ -86,7 +104,7 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
       } else {
         set({
           loadingState: 'error',
-          error: result.error || 'Không thể tải đánh giá',
+          error: result.message || (result as { error?: string }).error || 'Không thể tải đánh giá',
         });
       }
     } catch (error) {
@@ -109,7 +127,7 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
       } else {
         set({
           loadingState: 'error',
-          error: result.error || 'Không thể tải đánh giá của bạn',
+          error: result.message || (result as { error?: string }).error || 'Không thể tải đánh giá của bạn',
         });
       }
     } catch (error) {

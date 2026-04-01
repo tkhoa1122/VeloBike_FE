@@ -52,6 +52,8 @@ export interface ReviewSearchParams {
   userId?: string;
   sellerId?: string;
   buyerId?: string;
+  /** Lọc đánh giá theo đơn của tin đăng (BE) */
+  listingId?: string;
   minRating?: number;
   maxRating?: number;
   page?: number;

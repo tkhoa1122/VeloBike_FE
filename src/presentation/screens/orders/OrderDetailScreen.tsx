@@ -51,6 +51,7 @@ import Toast from 'react-native-toast-message';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ENV } from '../../../config/environment';
 import { usePaymentStore } from '../../viewmodels/PaymentStore';
+import { useReviewStore } from '../../viewmodels/ReviewStore';
 import {
   DisputeModal,
   ConfirmReceivedModal,
@@ -92,6 +93,7 @@ export const OrderDetailScreen: React.FC<OrderDetailScreenProps> = ({ orderId, i
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [showInspectorModal, setShowInspectorModal] = useState(false);
   const [confirmLoading, setConfirmLoading] = useState(false);
+  const [hasReviewed, setHasReviewed] = useState<boolean | null>(null);
 
   useEffect(() => {
     Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
@@ -109,6 +111,23 @@ export const OrderDetailScreen: React.FC<OrderDetailScreenProps> = ({ orderId, i
 
   // Use currentOrder from store if available, otherwise use localOrder
   const order = currentOrder || localOrder;
+
+  useEffect(() => {
+    if (order?.status !== 'COMPLETED' || !order._id) {
+      setHasReviewed(null);
+      return;
+    }
+    let cancelled = false;
+    useReviewStore
+      .getState()
+      .checkOrderReviewed(order._id)
+      .then(done => {
+        if (!cancelled) setHasReviewed(done);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [order?._id, order?.status]);
 
   // ✅ Gọi create-link trực tiếp (không qua PaymentScreen thừa - giống Web FE)
   const handlePayNow = async () => {
@@ -530,10 +549,17 @@ export const OrderDetailScreen: React.FC<OrderDetailScreenProps> = ({ orderId, i
 
           {order.status === 'COMPLETED' && (
             <View style={styles.secondaryActions}>
-              <TouchableOpacity style={styles.secondaryButton} onPress={() => setShowReviewModal(true)}>
-                <Star size={16} color={COLORS.primary} />
-                <Text style={styles.secondaryButtonText}>Đánh giá người bán</Text>
-              </TouchableOpacity>
+              {hasReviewed ? (
+                <View style={styles.reviewedBadge}>
+                  <Star size={16} color={COLORS.success} fill={COLORS.success} />
+                  <Text style={styles.reviewedBadgeText}>Bạn đã đánh giá đơn này</Text>
+                </View>
+              ) : (
+                <TouchableOpacity style={styles.secondaryButton} onPress={() => setShowReviewModal(true)}>
+                  <Star size={16} color={COLORS.primary} />
+                  <Text style={styles.secondaryButtonText}>Đánh giá người bán</Text>
+                </TouchableOpacity>
+              )}
               {order.inspectorId ? (
                 <TouchableOpacity style={styles.secondaryButton} onPress={() => setShowInspectorModal(true)}>
                   <Star size={16} color={COLORS.primary} />
@@ -576,6 +602,7 @@ export const OrderDetailScreen: React.FC<OrderDetailScreenProps> = ({ orderId, i
         onClose={() => setShowReviewModal(false)}
         onSuccess={() => {
           setShowReviewModal(false);
+          setHasReviewed(true);
           getOrderById(order._id);
         }}
       />
@@ -682,6 +709,22 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.sm,
     fontWeight: FONT_WEIGHTS.semibold,
     color: COLORS.primary,
+  },
+  reviewedBadge: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.xs,
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.base,
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.primarySurface,
+  },
+  reviewedBadgeText: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.semibold,
+    color: COLORS.success,
   },
   cancelButton: {
     flex: 1,

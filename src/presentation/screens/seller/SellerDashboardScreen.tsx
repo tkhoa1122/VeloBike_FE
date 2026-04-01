@@ -67,6 +67,8 @@ interface SellerDashboardScreenProps {
   onViewWallet?: () => void;
   onOpenListingDetail?: (listingId: string) => void;
   onUpgradeSubscription?: () => void;
+  /** Đánh giá nhận được (GET /reviews/my-reviews) */
+  onViewReviews?: () => void;
 }
 
 export const SellerDashboardScreen: React.FC<SellerDashboardScreenProps> = ({
@@ -76,6 +78,7 @@ export const SellerDashboardScreen: React.FC<SellerDashboardScreenProps> = ({
   onViewWallet,
   onOpenListingDetail,
   onUpgradeSubscription,
+  onViewReviews,
 }) => {
   const insets = useSafeAreaInsets();
   const { user } = useAuthStore();
@@ -268,6 +271,19 @@ export const SellerDashboardScreen: React.FC<SellerDashboardScreenProps> = ({
             <Text style={tw`text-gray-900 font-bold text-sm`}>Đơn hàng</Text>
           </TouchableOpacity>
         </View>
+
+        {onViewReviews && (
+          <TouchableOpacity
+            style={tw`mx-4 mb-4 flex-row items-center justify-between bg-white rounded-xl p-4 border border-gray-200`}
+            onPress={onViewReviews}
+          >
+            <View style={tw`flex-row items-center gap-3`}>
+              <Star size={22} color={COLORS.primary} />
+              <Text style={tw`text-gray-900 font-semibold`}>Đánh giá nhận được</Text>
+            </View>
+            <ArrowRight size={18} color="#9CA3AF" />
+          </TouchableOpacity>
+        )}
 
         {/* Premium Banner (if subscription = FREE) */}
         {user?.subscription?.plan === 'FREE' && (

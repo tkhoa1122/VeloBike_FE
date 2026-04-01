@@ -44,6 +44,7 @@ import {
   ICON_SIZES,
 } from '../../../config/theme';
 import { Button } from '../../components/common/Button';
+import { ListingReviewsSection } from '../../components/listing/ListingReviewsSection';
 import {
   formatCurrency,
   formatBikeCondition,
@@ -452,6 +453,10 @@ export const ListingDetailScreen: React.FC<ListingDetailScreenProps> = ({
               </View>
               <ChevronRight size={20} color={COLORS.textLight} />
             </TouchableOpacity>
+          )}
+
+          {!!sellerIdResolved && !!listing._id && (
+            <ListingReviewsSection sellerUserId={sellerIdResolved} listingId={listing._id} />
           )}
 
           {/* Safety tips */}

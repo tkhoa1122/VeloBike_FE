@@ -7,6 +7,9 @@ export interface ReviewRepository {
    */
   createReview(data: CreateReviewData): Promise<ApiResponse<Review>>;
 
+  /** Buyer: đã đánh giá đơn này chưa */
+  checkReviewed(orderId: string): Promise<ApiResponse<boolean>>;
+
   /**
    * Get reviews for a user (seller)
    */

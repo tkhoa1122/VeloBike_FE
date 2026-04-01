@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -43,34 +43,36 @@ interface OrderDetails {
 }
 
 export default function PaymentScreen({ navigation, route }: Props) {
-  const { orderId } = route.params;
+  const orderId = route.params?.orderId;
   const { createPaymentLink, loadingState, error } =
     usePaymentStore();
   const { getOrderById } = useOrderStore();
 
   const [orderDetails, setOrderDetails] = useState<OrderDetails | null>(null);
   const [loading, setLoading] = useState(true);
+  /** Lỗi tải đơn — tách khỏi loading để không kẹt spinner khi API trả null (trước đây `!orderDetails` giữ màn hình "Đang tải" vô hạn) */
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadOrderDetails();
-  }, [orderId]);
-
-  useEffect(() => {
-    if (error) {
-      Toast.show({
-        type: 'error',
-        text1: 'Lỗi thanh toán',
-        text2: error,
-      });
+  const loadOrderDetails = useCallback(async () => {
+    if (!orderId) {
+      setLoadError('Thiếu mã đơn hàng');
+      setLoading(false);
+      return;
     }
-  }, [error]);
-
-  const loadOrderDetails = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const order = await getOrderById(orderId);
       if (!order) {
-        throw new Error('Không tìm thấy đơn hàng');
+        const msg =
+          useOrderStore.getState().error || 'Không tìm thấy đơn hàng hoặc không có quyền xem';
+        setLoadError(msg);
+        Toast.show({
+          type: 'error',
+          text1: 'Không thể tải thông tin đơn hàng',
+          text2: msg,
+        });
+        return;
       }
 
       const listingTitle = typeof order.listingId === 'string'
@@ -104,19 +106,35 @@ export default function PaymentScreen({ navigation, route }: Props) {
           name: sellerName,
         },
       });
-    } catch (error) {
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Vui lòng thử lại';
+      setLoadError(msg);
       Toast.show({
         type: 'error',
         text1: 'Không thể tải thông tin đơn hàng',
-        text2: error instanceof Error ? error.message : 'Vui lòng thử lại',
+        text2: msg,
       });
     } finally {
       setLoading(false);
     }
-  };
+  }, [orderId, getOrderById]);
+
+  useEffect(() => {
+    loadOrderDetails();
+  }, [loadOrderDetails]);
+
+  useEffect(() => {
+    if (error) {
+      Toast.show({
+        type: 'error',
+        text1: 'Lỗi thanh toán',
+        text2: error,
+      });
+    }
+  }, [error]);
 
   const handlePayNow = async () => {
-    if (!orderDetails) return;
+    if (!orderDetails || !orderId) return;
 
     const payment = await createPaymentLink(orderId);
     if (payment) {
@@ -136,11 +154,31 @@ export default function PaymentScreen({ navigation, route }: Props) {
     }
   };
 
-  if (loading || !orderDetails) {
+  if (loading) {
     return (
       <SafeAreaView style={tw`flex-1 bg-white items-center justify-center`}>
         <ActivityIndicator size="large" color={COLORS.primary} />
         <Text style={tw`text-gray-500 mt-4`}>Đang tải thông tin đơn hàng...</Text>
+      </SafeAreaView>
+    );
+  }
+
+  if (loadError || !orderDetails) {
+    return (
+      <SafeAreaView style={tw`flex-1 bg-white items-center justify-center px-6`}>
+        <Text style={tw`text-base text-gray-800 text-center mb-2`}>
+          Không tải được thông tin đơn hàng
+        </Text>
+        <Text style={tw`text-sm text-gray-500 text-center mb-6`}>{loadError ?? 'Vui lòng thử lại'}</Text>
+        <TouchableOpacity
+          style={tw`bg-green-600 rounded-xl px-6 py-3 mb-3`}
+          onPress={loadOrderDetails}
+        >
+          <Text style={tw`text-white font-semibold`}>Thử lại</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={tw`py-2`} onPress={() => navigation.goBack()}>
+          <Text style={tw`text-gray-600`}>Quay lại</Text>
+        </TouchableOpacity>
       </SafeAreaView>
     );
   }
@@ -150,7 +188,7 @@ export default function PaymentScreen({ navigation, route }: Props) {
       {/* Header */}
       <View style={tw`bg-white px-4 py-3 border-b border-gray-200`}>
         <Text style={tw`text-xl font-bold text-gray-900`}>Xác nhận đơn hàng</Text>
-        <Text style={tw`text-sm text-gray-500 mt-1`}>Mã đơn: #{orderId.slice(-8)}</Text>
+        <Text style={tw`text-sm text-gray-500 mt-1`}>Mã đơn: #{orderId?.slice(-8) ?? '—'}</Text>
       </View>
 
       <ScrollView

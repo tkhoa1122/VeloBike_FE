@@ -43,6 +43,7 @@ import {
   SellerCreateListingScreen,
   SellerOrdersScreen,
   SellerWalletScreen,
+  SellerReceivedReviewsScreen,
 } from '../screens/seller';
 import { BuyerWalletScreen, BuyerPaymentHistoryScreen } from '../screens/buyer';
 import { useMessageStore } from '../viewmodels/MessageStore';
@@ -396,7 +397,14 @@ const ProfileStackScreen: React.FC<ProfileStackScreenProps> = ({ onLogout }) => 
           onUpgradeSubscription={() => {
             navigation.navigate('SubscriptionPlans');
           }}
+          onViewReviews={() => navigation.navigate('SellerReceivedReviews')}
         />
+      )}
+    </ProfileStack.Screen>
+
+    <ProfileStack.Screen name="SellerReceivedReviews">
+      {({ navigation }) => (
+        <SellerReceivedReviewsScreen onBack={() => navigation.goBack()} />
       )}
     </ProfileStack.Screen>
 

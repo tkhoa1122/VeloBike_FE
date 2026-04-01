@@ -157,6 +157,8 @@ export type ProfileStackParamList = {
   SellerCreateListing: undefined;
   SellerOrders: undefined;
   SellerWallet: undefined;
+  /** Đánh giá người mua dành cho shop */
+  SellerReceivedReviews: undefined;
   /** Xem chi tiết tin (cùng stack Profile — seller xem tin của mình) */
   ListingDetail: { listingId: string };
 };

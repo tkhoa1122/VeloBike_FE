@@ -9,116 +9,103 @@ export class ReviewRepositoryImpl implements ReviewRepository {
   async createReview(data: CreateReviewData): Promise<ApiResponse<Review>> {
     try {
       const response = await this.apiClient.createReview(data);
+      if (response.success && response.data) {
+        return {
+          success: true,
+          data: this.mapReviewFromApi(response.data),
+          message: response.message,
+        };
+      }
       return {
-        success: response.success,
-        data: this.mapReviewFromApi(response.data),
-        message: response.message,
+        success: false,
+        message: response.message || 'Không thể tạo đánh giá',
       };
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Không thể tạo đánh giá',
+        message: error instanceof Error ? error.message : 'Không thể tạo đánh giá',
       };
     }
   }
 
-  async getReviewsForUser(params: ReviewSearchParams): Promise<ApiResponse<{
-    reviews: Review[];
-    stats: ReviewStats;
-    totalPages: number;
-    currentPage: number;
-  }>> {
+  async checkReviewed(orderId: string): Promise<ApiResponse<boolean>> {
+    try {
+      const r = await this.apiClient.checkReviewed(orderId);
+      return { success: r.success, data: !!r.reviewed };
+    } catch (error) {
+      return {
+        success: false,
+        data: false,
+        message: error instanceof Error ? error.message : 'Không kiểm tra được đánh giá',
+      };
+    }
+  }
+
+  async getReviewsForUser(params: ReviewSearchParams): Promise<
+    ApiResponse<{
+      reviews: Review[];
+      stats: ReviewStats;
+      totalPages: number;
+      currentPage: number;
+    }>
+  > {
     try {
       const userId = params.userId || params.sellerId;
       if (!userId) {
-        return {
-          success: false,
-          error: 'User ID is required',
-        };
+        return { success: false, message: 'Thiếu userId' };
       }
 
       const response = await this.apiClient.getReviewsForUser(userId, {
         page: params.page,
         limit: params.limit,
-        minRating: params.minRating,
+        listingId: params.listingId,
       });
 
-      const reviews = response.data.map(r => this.mapReviewFromApi(r));
-      const stats: ReviewStats = {
-        averageRating: response.averageRating,
-        totalReviews: response.totalReviews,
-        ratingBreakdown: response.ratingBreakdown || {
-          5: 0, 4: 0, 3: 0, 2: 0, 1: 0,
-        },
-        categoryAverages: response.categoryAverages || {
-          itemAccuracy: 0,
-          communication: 0,
-          shipping: 0,
-          packaging: 0,
-        },
-      };
+      const rawList = Array.isArray(response.data) ? response.data : [];
+      const reviews = rawList.map(r => this.mapReviewFromApi(r));
+      const pg = response.pagination;
+      const totalReviews = pg?.total ?? reviews.length;
+      const totalPages = pg?.pages ?? 1;
+      const currentPage = pg?.page ?? 1;
+
+      const stats = this.computeStatsFromReviews(reviews, totalReviews);
 
       return {
         success: response.success,
         data: {
           reviews,
           stats,
-          totalPages: response.totalPages || 1,
-          currentPage: response.currentPage || 1,
+          totalPages,
+          currentPage,
         },
       };
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Không thể tải đánh giá',
+        message: error instanceof Error ? error.message : 'Không thể tải đánh giá',
       };
     }
   }
 
-  async getReviewById(id: string): Promise<ApiResponse<Review>> {
-    try {
-      const response = await this.apiClient.getReviewById(id);
-      return {
-        success: response.success,
-        data: this.mapReviewFromApi(response.data),
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Không thể tải đánh giá',
-      };
-    }
+  async getReviewById(_id: string): Promise<ApiResponse<Review>> {
+    return { success: false, message: 'API không hỗ trợ' };
   }
 
-  async voteReview(reviewId: string, helpful: boolean): Promise<ApiResponse> {
-    try {
-      const response = helpful
-        ? await this.apiClient.voteReviewHelpful(reviewId)
-        : await this.apiClient.voteReviewNotHelpful(reviewId);
-      
-      return {
-        success: response.success,
-        message: response.message,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Không thể vote đánh giá',
-      };
-    }
+  async voteReview(_reviewId: string, _helpful: boolean): Promise<ApiResponse> {
+    return { success: false, message: 'API không hỗ trợ' };
   }
 
-  async respondToReview(reviewId: string, response: string): Promise<ApiResponse> {
+  async respondToReview(reviewId: string, responseText: string): Promise<ApiResponse> {
     try {
-      const result = await this.apiClient.respondToReview(reviewId, response);
+      const result = await this.apiClient.replyToReview(reviewId, responseText);
       return {
-        success: result.success,
+        success: !!result.success,
         message: result.message,
       };
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Không thể phản hồi đánh giá',
+        message: error instanceof Error ? error.message : 'Không thể phản hồi',
       };
     }
   }
@@ -126,7 +113,9 @@ export class ReviewRepositoryImpl implements ReviewRepository {
   async getMyReviews(page?: number, limit?: number): Promise<ApiResponse<Review[]>> {
     try {
       const response = await this.apiClient.getMyReviews({ page, limit });
-      const reviews = response.data.map(r => this.mapReviewFromApi(r));
+      const inner = response.data?.reviews;
+      const rawList = Array.isArray(inner) ? inner : [];
+      const reviews = rawList.map(r => this.mapSellerInboxRowToReview(r));
       return {
         success: response.success,
         data: reviews,
@@ -135,63 +124,116 @@ export class ReviewRepositoryImpl implements ReviewRepository {
       return {
         success: false,
         data: [],
-        error: error instanceof Error ? error.message : 'Không thể tải đánh giá của bạn',
+        message: error instanceof Error ? error.message : 'Không thể tải đánh giá',
       };
     }
   }
 
-  async updateReview(reviewId: string, data: Partial<CreateReviewData>): Promise<ApiResponse<Review>> {
-    try {
-      const response = await this.apiClient.updateReview(reviewId, data);
-      return {
-        success: response.success,
-        data: this.mapReviewFromApi(response.data),
-        message: response.message,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Không thể cập nhật đánh giá',
-      };
-    }
+  async updateReview(_reviewId: string, _data: Partial<CreateReviewData>): Promise<ApiResponse<Review>> {
+    return { success: false, message: 'API không hỗ trợ' };
   }
 
-  async deleteReview(reviewId: string): Promise<ApiResponse> {
-    try {
-      const response = await this.apiClient.deleteReview(reviewId);
-      return {
-        success: response.success,
-        message: response.message,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Không thể xóa đánh giá',
-      };
-    }
+  async deleteReview(_reviewId: string): Promise<ApiResponse> {
+    return { success: false, message: 'API không hỗ trợ' };
   }
 
-  /**
-   * Helper: Map API response to Review entity
-   */
-  private mapReviewFromApi(data: any): Review {
+  private computeStatsFromReviews(reviews: Review[], totalFromServer: number): ReviewStats {
+    const breakdown = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 as number };
+    for (const r of reviews) {
+      const k = Math.min(5, Math.max(1, Math.round(r.rating))) as 1 | 2 | 3 | 4 | 5;
+      breakdown[k] += 1;
+    }
+    const avg =
+      reviews.length > 0 ? reviews.reduce((s, r) => s + r.rating, 0) / reviews.length : 0;
+    const cat = { itemAccuracy: 0, communication: 0, shipping: 0, packaging: 0 };
+    if (reviews.length > 0) {
+      for (const r of reviews) {
+        cat.itemAccuracy += r.categories.itemAccuracy;
+        cat.communication += r.categories.communication;
+        cat.shipping += r.categories.shipping;
+        cat.packaging += r.categories.packaging;
+      }
+      const n = reviews.length;
+      cat.itemAccuracy = Math.round((cat.itemAccuracy / n) * 10) / 10;
+      cat.communication = Math.round((cat.communication / n) * 10) / 10;
+      cat.shipping = Math.round((cat.shipping / n) * 10) / 10;
+      cat.packaging = Math.round((cat.packaging / n) * 10) / 10;
+    }
     return {
-      _id: data._id,
-      orderId: data.orderId,
-      buyerId: data.buyerId,
-      sellerId: data.sellerId,
-      rating: data.rating,
-      comment: data.comment,
-      categories: data.categories,
+      averageRating: Math.round(avg * 10) / 10,
+      totalReviews: totalFromServer,
+      ratingBreakdown: breakdown,
+      categoryAverages: cat,
+    };
+  }
+
+  /** BE Review: reviewerId, revieweeId (buyer đánh giá seller → reviewer = buyer) */
+  private mapReviewFromApi(data: any): Review {
+    const reviewer = data.reviewerId ?? data.buyerId;
+    const reviewee = data.revieweeId ?? data.sellerId;
+    return {
+      _id: String(data._id ?? data.id ?? ''),
+      orderId: String(data.orderId?._id ?? data.orderId ?? ''),
+      buyerId: reviewer as Review['buyerId'],
+      sellerId: reviewee as Review['sellerId'],
+      rating: Number(data.rating ?? 0),
+      comment: String(data.comment ?? ''),
+      categories: {
+        itemAccuracy: Number(data.categories?.itemAccuracy ?? data.rating ?? 5),
+        communication: Number(data.categories?.communication ?? data.rating ?? 5),
+        shipping: Number(data.categories?.shipping ?? data.rating ?? 5),
+        packaging: Number(data.categories?.packaging ?? data.rating ?? 5),
+      },
       photos: data.photos,
-      response: data.response ? {
-        content: data.response.content,
-        respondedAt: new Date(data.response.respondedAt),
-      } : undefined,
-      helpful: data.helpful || 0,
-      notHelpful: data.notHelpful || 0,
+      response:
+        data.reply != null
+          ? {
+              content: String(data.reply),
+              respondedAt: new Date(data.replyDate ?? Date.now()),
+            }
+          : data.response
+            ? {
+                content: data.response.content,
+                respondedAt: new Date(data.response.respondedAt),
+              }
+            : undefined,
+      helpful: data.helpful ?? 0,
+      notHelpful: data.notHelpful ?? 0,
       createdAt: new Date(data.createdAt),
       updatedAt: data.updatedAt ? new Date(data.updatedAt) : undefined,
+    };
+  }
+
+  /** GET /reviews/my-reviews — mỗi dòng: buyerName, rating, comment, productTitle, … */
+  private mapSellerInboxRowToReview(row: Record<string, unknown>): Review {
+    const rid = String(row.id ?? row._id ?? '');
+    return {
+      _id: rid,
+      orderId: '',
+      buyerId: {
+        _id: '',
+        fullName: String(row.buyerName ?? 'Người mua'),
+        avatar: row.buyerAvatar as string | undefined,
+      },
+      sellerId: '',
+      rating: Number(row.rating ?? 0),
+      comment: String(row.comment ?? row.content ?? ''),
+      categories: {
+        itemAccuracy: Number((row.categories as any)?.itemAccuracy ?? row.rating ?? 5),
+        communication: Number((row.categories as any)?.communication ?? row.rating ?? 5),
+        shipping: Number((row.categories as any)?.shipping ?? row.rating ?? 5),
+        packaging: Number((row.categories as any)?.packaging ?? row.rating ?? 5),
+      },
+      response:
+        row.reply != null
+          ? {
+              content: String(row.reply),
+              respondedAt: new Date((row.replyDate as string) ?? Date.now()),
+            }
+          : undefined,
+      helpful: 0,
+      notHelpful: 0,
+      createdAt: new Date((row.createdAt as string) ?? Date.now()),
     };
   }
 }
