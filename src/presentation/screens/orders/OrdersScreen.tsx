@@ -39,6 +39,8 @@ import { useOrderStore } from '../../viewmodels/OrderStore';
 import { Order } from '../../../domain/entities/Order';
 import { Listing } from '../../../domain/entities/Listing';
 import { User } from '../../../domain/entities/User';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { ENV } from '../../../config/environment';
 
 const STATUS_TABS = [
   { key: 'ALL', label: 'Tất cả' },
@@ -96,7 +98,7 @@ const getSellerName = (order: Order): string => {
 
 interface OrdersScreenProps {
   onBack?: () => void;
-  onOrderPress?: (orderId: string) => void;
+  onOrderPress?: (orderId: string, order?: Order) => void; // ✅ Pass order data
 }
 
 export const OrdersScreen: React.FC<OrdersScreenProps> = ({ onBack, onOrderPress }) => {
@@ -104,11 +106,86 @@ export const OrdersScreen: React.FC<OrdersScreenProps> = ({ onBack, onOrderPress
   const [activeTab, setActiveTab] = useState('ALL');
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const { orders, loadingState, getMyOrders } = useOrderStore();
+  const hasAutoChecked = useRef(false);
 
   useEffect(() => {
     Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
     getMyOrders({ page: 1, limit: 20 });
   }, [fadeAnim, getMyOrders]);
+
+  // Auto-check payment for recent CREATED orders (like WEB)
+  useEffect(() => {
+    if (orders.length > 0 && !hasAutoChecked.current) {
+      const createdOrders = orders.filter(o => o.status === 'CREATED');
+      if (createdOrders.length > 0) {
+        // Check the most recent created order automatically (silent check)
+        const latestOrder = createdOrders[0];
+        checkPaymentSilent(latestOrder._id);
+        hasAutoChecked.current = true;
+      }
+    }
+  }, [orders]);
+
+  const checkPaymentSilent = async (orderId: string) => {
+    try {
+      const token = await AsyncStorage.getItem('access_token');
+      if (!token) return;
+
+      // 1. Fetch order to get orderCode from timeline
+      const orderRes = await fetch(`${ENV.API_BASE_URL}/orders/${orderId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      if (!orderRes.ok) return;
+
+      const orderData = await orderRes.json();
+      const order = orderData.data;
+
+      // If already paid, refresh list
+      if (order.status !== 'CREATED') {
+        getMyOrders({ page: 1, limit: 20 });
+        return;
+      }
+
+      // Extract orderCode from timeline
+      const timelineNote = order.timeline?.find((t: any) => t.note?.includes('orderCode:'))?.note;
+      const orderCode = timelineNote ? timelineNote.split('orderCode: ')[1]?.trim() : null;
+
+      if (!orderCode) return;
+
+      // 2. Check PayOS status
+      const infoRes = await fetch(`${ENV.API_BASE_URL}/payment/info/${orderCode}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (!infoRes.ok) return;
+
+      const infoData = await infoRes.json();
+
+      if (infoData.data?.status === 'PAID') {
+        // 3. Trigger webhook manually
+        const webhookBody = {
+          code: "00000",
+          orderCode: Number(orderCode),
+          data: infoData.data
+        };
+
+        const webhookRes = await fetch(`${ENV.API_BASE_URL}/payment/webhook`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(webhookBody)
+        });
+
+        if (webhookRes.ok) {
+          // Refresh orders list
+          getMyOrders({ page: 1, limit: 20 });
+        }
+      }
+    } catch (error) {
+      // Silent fail - don't show error to user
+      console.log('Auto-check payment failed:', error);
+    }
+  };
 
   const filtered = activeTab === 'ALL' ? orders : orders.filter(o => o.status === activeTab);
 
@@ -120,7 +197,11 @@ export const OrdersScreen: React.FC<OrdersScreenProps> = ({ onBack, onOrderPress
     const sellerName = getSellerName(item);
 
     return (
-      <TouchableOpacity style={styles.orderCard} activeOpacity={0.8} onPress={() => onOrderPress?.(item._id)}>
+      <TouchableOpacity style={styles.orderCard} activeOpacity={0.8} onPress={() => {
+        // Serialize để tránh lỗi non-serializable (Date objects) trong navigation params
+        const serializedOrder = JSON.parse(JSON.stringify(item));
+        onOrderPress?.(item._id, serializedOrder);
+      }}>
         <View style={styles.orderHeader}>
           <View style={[styles.statusBadge, { backgroundColor: statusColor + '15' }]}>
             <StatusIcon size={12} color={statusColor} />

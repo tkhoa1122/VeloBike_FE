@@ -1,5 +1,6 @@
 import { API_CONFIG, ENDPOINTS } from '../../config/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { decodeUserIdFromJwt } from '../../utils/jwtPayload';
 
 // Storage keys
 const STORAGE_KEYS = {
@@ -70,6 +71,12 @@ export class BaseApiClient {
       console.warn('Error getting access token:', error);
       return null;
     }
+  }
+
+  /** user id trong payload JWT (BE: field `id`) — dùng khi AuthStore chưa có user._id */
+  async getUserIdFromStoredAccessToken(): Promise<string> {
+    const token = await this.getStoredAccessToken();
+    return decodeUserIdFromJwt(token);
   }
 
   /**

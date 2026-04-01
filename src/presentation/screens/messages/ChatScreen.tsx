@@ -1,6 +1,7 @@
 /**
  * VeloBike Chat Screen
  * Message thread UI with bubbles, input bar, listing reference
+ * ✅ Fixes: getOrCreateConversation, polling 5s, render ảnh thật
  */
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
@@ -15,6 +16,7 @@ import {
   StatusBar,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -40,108 +42,125 @@ import { useUploadStore } from '../../viewmodels/UploadStore';
 import { useImagePicker } from '../../hooks/useImagePicker';
 import type { MessageEntry } from '../../../data/repositories/MessageRepositoryImpl';
 import Toast from 'react-native-toast-message';
+import { container } from '../../../di/Container';
 
 interface ChatScreenProps {
   conversationId?: string;
+  /** Đối tác là người bán (luồng người mua) */
+  sellerId?: string;
+  /** Đối tác là người mua (luồng người bán) */
+  buyerId?: string;
+  /** Đối tác khi mở từ danh sách hội thoại */
+  peerUserId?: string;
   participantName?: string;
   participantAvatar?: string;
   listingTitle?: string;
   listingImage?: string;
+  listingId?: string;
+  orderId?: string;
   onBack?: () => void;
 }
 
 export const ChatScreen: React.FC<ChatScreenProps> = ({
-  conversationId,
+  conversationId: initialConvId,
+  sellerId,
+  buyerId,
+  peerUserId,
   participantName = '',
   participantAvatar,
   listingTitle,
   listingImage,
+  listingId,
+  orderId,
   onBack,
 }) => {
   const insets = useSafeAreaInsets();
-  const { currentMessages, getMessages, sendMessage: storeSendMessage } = useMessageStore();
+  const {
+    currentMessages,
+    getMessages,
+    sendMessage: storeSendMessage,
+    clearMessages,
+    getConversations,
+  } = useMessageStore();
   const { user } = useAuthStore();
   const { uploadFile } = useUploadStore();
   const { showImagePicker, toUploadFileData } = useImagePicker({ maxFiles: 5, quality: 0.7 });
-  const currentUserId = user?._id ?? '';
+  /** BE / một API trả `id` thay vì `_id` — khớp JWT payload `id` */
+  const currentUserId = user?._id ?? (user as { id?: string } | null)?.id ?? '';
+
   const [inputText, setInputText] = useState('');
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [conversationId, setConversationId] = useState<string | undefined>(initialConvId);
+  const peerFromProps = sellerId || buyerId || peerUserId || '';
+  const [initLoading, setInitLoading] = useState(!initialConvId && !!peerFromProps);
+  const [convParticipantName, setConvParticipantName] = useState(participantName);
+  const [convParticipantAvatar, setConvParticipantAvatar] = useState(participantAvatar);
+  /** Người nhận khi gửi tin (API /messages) */
+  const [receiverUserId, setReceiverUserId] = useState(peerFromProps);
+
   const flatListRef = useRef<FlatList>(null);
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  useEffect(() => {
-    if (conversationId) getMessages(conversationId);
-  }, [conversationId, getMessages]);
+  // ─── Polling 5s (useCallback phải đứng TRƯỚC useEffect — Rules of Hooks) ───
+  const startPolling = useCallback((convId: string) => {
+    if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    pollIntervalRef.current = setInterval(() => {
+      getMessages(convId);
+    }, 5000);
+  }, [getMessages]);
 
+  // ─── Gửi tin nhắn ─────────────────────────────────────────────────────────
   const handleSend = useCallback(async () => {
     if (!inputText.trim() || !conversationId) return;
     const text = inputText.trim();
     setInputText('');
-    // Determine receiverId - for now pass empty and let BE derive
     await storeSendMessage({
       conversationId,
-      receiverId: '', // BE will resolve from conversation
+      receiverId: receiverUserId,
       content: text,
     });
-  }, [inputText, conversationId, storeSendMessage]);
+  }, [inputText, conversationId, receiverUserId, storeSendMessage]);
 
+  // ─── Gửi ảnh ──────────────────────────────────────────────────────────────
   const handleImagePick = useCallback(async () => {
     if (!conversationId) return;
-    
     setUploadingImage(true);
     try {
-      const pickedImages = await showImagePicker(true); // Allow multiple
-      if (pickedImages.length === 0) {
-        setUploadingImage(false);
-        return;
-      }
+      const pickedImages = await showImagePicker(true);
+      if (pickedImages.length === 0) return;
 
-      // Upload images one by one
       for (const image of pickedImages) {
         const uploadData = toUploadFileData([image]);
         const url = await uploadFile(uploadData[0]);
-        
         if (url) {
-          // Send image URL as message
           await storeSendMessage({
             conversationId,
-            receiverId: '',
+            receiverId: receiverUserId,
             content: `[Image]: ${url}`,
             attachments: [url],
           });
         }
       }
-
-      Toast.show({
-        type: 'success',
-        text1: 'Gửi ảnh thành công',
-        text2: `Đã gửi ${pickedImages.length} ảnh`,
-      });
+      Toast.show({ type: 'success', text1: 'Đã gửi ảnh' });
     } catch (error) {
-      Toast.show({
-        type: 'error',
-        text1: 'Lỗi gửi ảnh',
-        text2: error instanceof Error ? error.message : 'Vui lòng thử lại',
-      });
+      Toast.show({ type: 'error', text1: 'Lỗi gửi ảnh', text2: error instanceof Error ? error.message : '' });
     } finally {
       setUploadingImage(false);
     }
-  }, [conversationId, showImagePicker, toUploadFileData, uploadFile, storeSendMessage]);
+  }, [conversationId, receiverUserId, showImagePicker, toUploadFileData, uploadFile, storeSendMessage]);
 
-  const formatMsgTime = (date: Date) => {
-    return new Date(date).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
-  };
+  const formatMsgTime = (date: Date) =>
+    new Date(date).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
 
   const renderStatus = (status: MessageEntry['readStatus']) => {
     switch (status) {
-      case 'SENT':
-        return <Check size={12} color={COLORS.textLight} />;
-      case 'DELIVERED':
-        return <CheckCheck size={12} color={COLORS.textLight} />;
-      case 'READ':
-        return <CheckCheck size={12} color={COLORS.primary} />;
+      case 'SENT':      return <Check size={12} color={COLORS.textLight} />;
+      case 'DELIVERED': return <CheckCheck size={12} color={COLORS.textLight} />;
+      case 'READ':      return <CheckCheck size={12} color={COLORS.primary} />;
     }
   };
 
+  // ─── Render 1 message ─────────────────────────────────────────────────────
   const renderItem = useCallback(({ item, index }: { item: MessageEntry; index: number }) => {
     const isMe = item.senderId === currentUserId;
     const prevMsg = index > 0 ? currentMessages[index - 1] : null;
@@ -150,33 +169,193 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
       new Date(item.timestamp).toDateString() !== new Date(prevMsg.timestamp).toDateString();
     const isConsecutive = prevMsg && prevMsg.senderId === item.senderId && !showDate;
 
+    // ✅ Detect image message: "[Image]: https://..."
+    const imageUrlMatch = item.content.match(/^\[Image\]:\s*(https?:\/\/\S+)/);
+    const isImageMsg = !!imageUrlMatch;
+    const imageUrl = imageUrlMatch?.[1];
+
     return (
       <View>
         {showDate && (
           <View style={styles.dateSep}>
             <Text style={styles.dateSepText}>
-              {new Date(item.timestamp).toLocaleDateString('vi-VN', { weekday: 'long', day: 'numeric', month: 'long' })}
+              {new Date(item.timestamp).toLocaleDateString('vi-VN', {
+                weekday: 'long', day: 'numeric', month: 'long',
+              })}
             </Text>
           </View>
         )}
         <View style={[styles.msgRow, isMe && styles.msgRowMe, isConsecutive && styles.msgConsecutive]}>
-          {!isMe && !isConsecutive && participantAvatar && (
-            <Image source={{ uri: participantAvatar }} style={styles.msgAvatar} />
+          {!isMe && !isConsecutive && convParticipantAvatar && (
+            <Image source={{ uri: convParticipantAvatar }} style={styles.msgAvatar} />
           )}
-          {!isMe && (isConsecutive || !participantAvatar) && <View style={styles.msgAvatarSpacer} />}
-          <View style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleOther]}>
-            <Text style={[styles.bubbleText, isMe && styles.bubbleTextMe]}>{item.content}</Text>
-            <View style={styles.bubbleMeta}>
-              <Text style={[styles.bubbleTime, isMe && styles.bubbleTimeMe]}>
-                {formatMsgTime(item.timestamp)}
-              </Text>
-              {isMe && renderStatus(item.readStatus)}
+          {!isMe && (isConsecutive || !convParticipantAvatar) && <View style={styles.msgAvatarSpacer} />}
+
+          {isImageMsg && imageUrl ? (
+            // ✅ Render ảnh thật
+            <View style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleOther, styles.imageBubble]}>
+              <Image
+                source={{ uri: imageUrl }}
+                style={styles.messageImage}
+                resizeMode="cover"
+              />
+              <View style={styles.bubbleMeta}>
+                <Text style={[styles.bubbleTime, isMe && styles.bubbleTimeMe]}>
+                  {formatMsgTime(item.timestamp)}
+                </Text>
+                {isMe && renderStatus(item.readStatus)}
+              </View>
             </View>
-          </View>
+          ) : (
+            // Text message bình thường
+            <View style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleOther]}>
+              <Text style={[styles.bubbleText, isMe && styles.bubbleTextMe]}>{item.content}</Text>
+              <View style={styles.bubbleMeta}>
+                <Text style={[styles.bubbleTime, isMe && styles.bubbleTimeMe]}>
+                  {formatMsgTime(item.timestamp)}
+                </Text>
+                {isMe && renderStatus(item.readStatus)}
+              </View>
+            </View>
+          )}
         </View>
       </View>
     );
-  }, [currentMessages, participantAvatar, currentUserId]);
+  }, [currentMessages, convParticipantAvatar, currentUserId]);
+
+  // ─── Init: lấy hoặc tạo conversation (GET /messages/conversation/:userId?...) ─
+  useEffect(() => {
+    let cancelled = false;
+
+    const init = async () => {
+      clearMessages();
+      setConversationId(initialConvId);
+      setReceiverUserId(peerFromProps);
+      setConvParticipantName(participantName);
+      setConvParticipantAvatar(participantAvatar);
+
+      if (initialConvId) {
+        await getMessages(initialConvId);
+        if (!cancelled) startPolling(initialConvId);
+        return;
+      }
+
+      if (!peerFromProps) {
+        setInitLoading(false);
+        return;
+      }
+
+      // Đường nhanh: hội thoại đã tồn tại (đã thấy trong tab Tin nhắn) — không gọi lại getOrCreate
+      let convs = useMessageStore.getState().conversations;
+      if (convs.length === 0) {
+        await getConversations();
+        convs = useMessageStore.getState().conversations;
+      }
+      const existing = convs.find(c => String(c.participantId) === String(peerFromProps));
+      if (existing?._id) {
+        try {
+          if (cancelled) return;
+          setConversationId(existing._id);
+          setReceiverUserId(peerFromProps);
+          if (existing.participantName) {
+            setConvParticipantName(existing.participantName);
+          }
+          if (existing.participantAvatar) {
+            setConvParticipantAvatar(existing.participantAvatar);
+          }
+          await getMessages(existing._id);
+          if (!cancelled) startPolling(existing._id);
+        } catch (err) {
+          console.error('[ChatScreen] load existing conv:', err);
+          Toast.show({ type: 'error', text1: 'Lỗi tải tin nhắn' });
+        } finally {
+          if (!cancelled) setInitLoading(false);
+        }
+        return;
+      }
+
+      setInitLoading(true);
+      try {
+        const repo = container().messageRepository;
+        const result = await repo.getOrCreateConversation(
+          peerFromProps,
+          listingId,
+          orderId,
+          currentUserId,
+        );
+        if (cancelled) return;
+        if (result.success && result.data) {
+          const convId = result.data._id;
+          setConversationId(convId);
+          if (result.data.participantId) {
+            setReceiverUserId(result.data.participantId);
+          }
+          if (!participantName || participantName === 'Người bán' || participantName === 'Người mua') {
+            setConvParticipantName(result.data.participantName || participantName || 'Người bán');
+          }
+          if (result.data.participantAvatar) {
+            setConvParticipantAvatar(result.data.participantAvatar);
+          }
+          await getMessages(convId);
+          startPolling(convId);
+        } else {
+          Toast.show({ type: 'error', text1: 'Không thể mở cuộc trò chuyện' });
+        }
+      } catch (err) {
+        console.error('[ChatScreen] init error:', err);
+        Toast.show({ type: 'error', text1: 'Lỗi kết nối' });
+      } finally {
+        if (!cancelled) setInitLoading(false);
+      }
+    };
+
+    init();
+
+    return () => {
+      cancelled = true;
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+      clearMessages();
+    };
+  }, [
+    initialConvId,
+    sellerId,
+    buyerId,
+    peerUserId,
+    listingId,
+    orderId,
+    currentUserId,
+    startPolling,
+    clearMessages,
+    getMessages,
+    getConversations,
+  ]);
+
+  // Bổ sung receiver khi chỉ có conversationId (không có peer trên route)
+  useEffect(() => {
+    if (receiverUserId || !currentUserId || currentMessages.length === 0) return;
+    const last = currentMessages[currentMessages.length - 1];
+    const other = last.senderId === currentUserId ? last.receiverId : last.senderId;
+    if (other) setReceiverUserId(other);
+  }, [currentMessages, receiverUserId, currentUserId]);
+
+  // ─── UI (một return sau toàn bộ hooks) ─────────────────────────────────────
+  if (initLoading) {
+    return (
+      <View style={[styles.root, { paddingTop: insets.top }]}>
+        <StatusBar barStyle="dark-content" backgroundColor={COLORS.white} />
+        <View style={styles.header}>
+          <TouchableOpacity onPress={onBack} style={styles.backBtn}>
+            <ArrowLeft size={22} color={COLORS.text} />
+          </TouchableOpacity>
+          <Text style={styles.headerName}>Đang kết nối...</Text>
+        </View>
+        <View style={styles.loadingCenter}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+          <Text style={styles.loadingText}>Đang mở cuộc trò chuyện...</Text>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
@@ -187,71 +366,98 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
         <TouchableOpacity onPress={onBack} style={styles.backBtn}>
           <ArrowLeft size={22} color={COLORS.text} />
         </TouchableOpacity>
-        {participantAvatar ? (
-          <Image source={{ uri: participantAvatar }} style={styles.headerAvatar} />
+        {convParticipantAvatar ? (
+          <Image source={{ uri: convParticipantAvatar }} style={styles.headerAvatar} />
         ) : <View style={styles.headerAvatar} />}
         <View style={styles.headerInfo}>
-          <Text style={styles.headerName} numberOfLines={1}>{participantName}</Text>
+          <Text style={styles.headerName} numberOfLines={1}>{convParticipantName}</Text>
           <Text style={styles.headerStatus}>Đang hoạt động</Text>
         </View>
-        <TouchableOpacity style={styles.headerAction}><Phone size={20} color={COLORS.primary} /></TouchableOpacity>
-        <TouchableOpacity style={styles.headerAction}><MoreVertical size={20} color={COLORS.textSecondary} /></TouchableOpacity>
+        <TouchableOpacity style={styles.headerAction}>
+          <Phone size={20} color={COLORS.primary} />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.headerAction}>
+          <MoreVertical size={20} color={COLORS.textSecondary} />
+        </TouchableOpacity>
       </View>
 
       {/* Listing reference */}
       {listingTitle && (
         <TouchableOpacity style={styles.listingBar}>
           {listingImage && <Image source={{ uri: listingImage }} style={styles.listingThumb} />}
-          <Text style={styles.listingBarText} numberOfLines={1}>Đang trao đổi: {listingTitle}</Text>
+          <Text style={styles.listingBarText} numberOfLines={1}>
+            Đang trao đổi: {listingTitle}
+          </Text>
         </TouchableOpacity>
       )}
 
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={0}
-      >
-        <FlatList
-          ref={flatListRef}
-          data={currentMessages}
-          keyExtractor={i => i._id}
-          renderItem={renderItem}
-          contentContainerStyle={styles.messagesList}
-          showsVerticalScrollIndicator={false}
-          onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
-          onLayout={() => flatListRef.current?.scrollToEnd({ animated: false })}
-        />
-
-        {/* Input bar */}
-        <View style={[styles.inputBar, { paddingBottom: insets.bottom + SPACING.sm }]}>
-          <TouchableOpacity 
-            style={styles.attachBtn}
-            onPress={handleImagePick}
-            disabled={uploadingImage}
-          >
-            <ImageIcon size={22} color={uploadingImage ? COLORS.textLight : COLORS.primary} />
-          </TouchableOpacity>
-          <View style={styles.inputWrap}>
-            <TextInput
-              style={styles.textInput}
-              placeholder={uploadingImage ? "Đang gửi ảnh..." : "Nhập tin nhắn..."}
-              placeholderTextColor={COLORS.textLight}
-              value={inputText}
-              onChangeText={setInputText}
-              multiline
-              maxLength={1000}
-              editable={!uploadingImage}
-            />
-          </View>
-          <TouchableOpacity
-            style={[styles.sendBtn, inputText.trim().length > 0 && styles.sendBtnActive]}
-            onPress={handleSend}
-            disabled={!inputText.trim() || uploadingImage}
-          >
-            <Send size={20} color={inputText.trim() ? COLORS.white : COLORS.textLight} />
-          </TouchableOpacity>
+      {/* Lỗi không có conversation */}
+      {!conversationId && !initLoading && (
+        <View style={styles.loadingCenter}>
+          <Text style={styles.loadingText}>Không thể mở cuộc trò chuyện</Text>
         </View>
-      </KeyboardAvoidingView>
+      )}
+
+      {conversationId && (
+        <KeyboardAvoidingView
+          style={styles.flex}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          keyboardVerticalOffset={0}
+        >
+          <FlatList
+            ref={flatListRef}
+            data={currentMessages}
+            keyExtractor={i => i._id}
+            renderItem={renderItem}
+            contentContainerStyle={styles.messagesList}
+            showsVerticalScrollIndicator={false}
+            onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+            onLayout={() => flatListRef.current?.scrollToEnd({ animated: false })}
+            ListEmptyComponent={
+              <View style={styles.emptyChat}>
+                <Text style={styles.emptyChatText}>
+                  Bắt đầu cuộc trò chuyện với {convParticipantName}
+                </Text>
+              </View>
+            }
+          />
+
+          {/* Input bar */}
+          <View style={[styles.inputBar, { paddingBottom: insets.bottom + SPACING.sm }]}>
+            <TouchableOpacity
+              style={styles.attachBtn}
+              onPress={handleImagePick}
+              disabled={uploadingImage}
+            >
+              {uploadingImage ? (
+                <ActivityIndicator size="small" color={COLORS.primary} />
+              ) : (
+                <ImageIcon size={22} color={COLORS.primary} />
+              )}
+            </TouchableOpacity>
+            <View style={styles.inputWrap}>
+              <TextInput
+                style={styles.textInput}
+                placeholder={uploadingImage ? 'Đang gửi ảnh...' : 'Nhập tin nhắn...'}
+                placeholderTextColor={COLORS.textLight}
+                value={inputText}
+                onChangeText={setInputText}
+                multiline
+                maxLength={1000}
+                editable={!uploadingImage}
+                onSubmitEditing={handleSend}
+              />
+            </View>
+            <TouchableOpacity
+              style={[styles.sendBtn, inputText.trim().length > 0 && styles.sendBtnActive]}
+              onPress={handleSend}
+              disabled={!inputText.trim() || uploadingImage}
+            >
+              <Send size={20} color={inputText.trim() ? COLORS.white : COLORS.textLight} />
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      )}
     </View>
   );
 };
@@ -287,7 +493,14 @@ const styles = StyleSheet.create({
   listingBarText: { fontSize: FONT_SIZES.sm, color: COLORS.primaryDark, flex: 1 },
   messagesList: { paddingHorizontal: SPACING.base, paddingVertical: SPACING.md },
   dateSep: { alignItems: 'center', marginVertical: SPACING.base },
-  dateSepText: { fontSize: FONT_SIZES.xs, color: COLORS.textLight, backgroundColor: COLORS.surface, paddingHorizontal: SPACING.md, paddingVertical: 4, borderRadius: RADIUS.full },
+  dateSepText: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textLight,
+    backgroundColor: COLORS.surface,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 4,
+    borderRadius: RADIUS.full,
+  },
   msgRow: { flexDirection: 'row', marginBottom: SPACING.sm, alignItems: 'flex-end' },
   msgRowMe: { justifyContent: 'flex-end' },
   msgConsecutive: { marginBottom: 3 },
@@ -296,6 +509,8 @@ const styles = StyleSheet.create({
   bubble: { maxWidth: '75%', borderRadius: RADIUS.lg, padding: SPACING.md },
   bubbleMe: { backgroundColor: COLORS.primary, borderBottomRightRadius: RADIUS.xs },
   bubbleOther: { backgroundColor: COLORS.surface, borderBottomLeftRadius: RADIUS.xs },
+  imageBubble: { padding: 4 },
+  messageImage: { width: 200, height: 200, borderRadius: RADIUS.md },
   bubbleText: { fontSize: FONT_SIZES.md, color: COLORS.text, lineHeight: FONT_SIZES.md * 1.5 },
   bubbleTextMe: { color: COLORS.white },
   bubbleMeta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 4, marginTop: 4 },
@@ -311,7 +526,7 @@ const styles = StyleSheet.create({
     borderTopColor: COLORS.border,
     gap: SPACING.sm,
   },
-  attachBtn: { padding: 8, marginBottom: 4 },
+  attachBtn: { padding: 8, marginBottom: 4, width: 38, alignItems: 'center' },
   inputWrap: {
     flex: 1,
     backgroundColor: COLORS.surface,
@@ -331,6 +546,10 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   sendBtnActive: { backgroundColor: COLORS.primary },
+  loadingCenter: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
+  loadingText: { fontSize: FONT_SIZES.base, color: COLORS.textSecondary },
+  emptyChat: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 60 },
+  emptyChatText: { fontSize: FONT_SIZES.sm, color: COLORS.textLight, textAlign: 'center' },
 });
 
 export default ChatScreen;

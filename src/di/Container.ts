@@ -15,6 +15,7 @@ import { ReviewApiClient } from '../data/apis/ReviewApiClient';
 import { InspectionApiClient } from '../data/apis/InspectionApiClient';
 import { UploadApiClient } from '../data/apis/UploadApiClient';
 import { DisputeApiClient } from '../data/apis/DisputeApiClient';
+import { WalletApiClient } from '../data/apis/WalletApiClient';
 
 // Repository Implementations
 import { AuthRepositoryImpl } from '../data/repositories/AuthRepositoryImpl';
@@ -70,6 +71,7 @@ export class DIContainer {
   private _inspectionApiClient!: InspectionApiClient;
   private _uploadApiClient!: UploadApiClient;
   private _disputeApiClient!: DisputeApiClient;
+  private _walletApiClient!: WalletApiClient;
 
   // Repository Implementations
   private _authRepository!: AuthRepositoryImpl;
@@ -138,6 +140,7 @@ export class DIContainer {
     this._inspectionApiClient = new InspectionApiClient();
     this._uploadApiClient = new UploadApiClient();
     this._disputeApiClient = new DisputeApiClient();
+    this._walletApiClient = new WalletApiClient();
   }
 
   /**
@@ -264,6 +267,10 @@ export class DIContainer {
 
   get disputeRepository(): DisputeRepository {
     return this._disputeRepository;
+  }
+
+  get walletApiClient(): WalletApiClient {
+    return this._walletApiClient;
   }
 
   // Auth Use Cases

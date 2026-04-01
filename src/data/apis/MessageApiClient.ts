@@ -2,18 +2,17 @@ import { BaseApiClient } from './BaseApiClient';
 import { ENDPOINTS } from '../../config/api';
 import { UserModel } from '../models/UserModel';
 
-// Response models
+// Response models — BE: Conversation có buyerId + sellerId (populate), không có participants
 export interface ConversationResponseModel {
   _id: string;
-  participants: (string | UserModel)[];
-  listingId?: string;
-  orderId?: string;
-  lastMessage?: {
-    content: string;
-    timestamp: string;
-    senderId?: string;
-  };
-  unreadCount: number;
+  participants?: (string | UserModel)[];
+  buyerId?: string | UserModel;
+  sellerId?: string | UserModel;
+  listingId?: string | { _id?: string };
+  orderId?: string | { _id?: string };
+  lastMessage?: string | { content: string; timestamp: string; senderId?: string };
+  lastMessageAt?: string;
+  unreadCount?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -25,8 +24,11 @@ export interface MessageResponseModel {
   receiverId: string | UserModel;
   content: string;
   attachments?: string[];
-  timestamp: string;
-  readStatus: 'SENT' | 'DELIVERED' | 'READ';
+  /** BE dùng createdAt; một số client cũ dùng timestamp */
+  timestamp?: string;
+  createdAt?: string;
+  isRead?: boolean;
+  readStatus?: 'SENT' | 'DELIVERED' | 'READ';
 }
 
 export interface ConversationListResponseModel {
@@ -40,8 +42,10 @@ export interface ConversationListResponseModel {
 export interface MessageListResponseModel {
   success: boolean;
   data: MessageResponseModel[];
-  totalPages: number;
-  currentPage: number;
+  totalPages?: number;
+  currentPage?: number;
+  /** BE trả pagination.pages / pagination.page */
+  pagination?: { total: number; page: number; limit: number; pages: number };
   message?: string;
 }
 

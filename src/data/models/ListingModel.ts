@@ -91,6 +91,17 @@ export interface ListingModel {
     };
     badge?: string;
   };
+  /** Alias hiếm khi BE trả song song với sellerId */
+  seller?: string | {
+    _id: string;
+    fullName: string;
+    reputation?: {
+      score: number;
+      reviewCount: number;
+    };
+    avatar?: string;
+    badge?: string;
+  };
   
   views: number;
   saves: number;

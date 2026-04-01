@@ -52,7 +52,18 @@ import {
 } from '../../../utils/formatters';
 import { useListingStore } from '../../viewmodels/ListingStore';
 import { useWishlistStore } from '../../viewmodels/WishlistStore';
+import { useAuthStore } from '../../viewmodels/AuthStore';
 import type { Listing } from '../../../domain/entities/Listing';
+import type { User } from '../../../domain/entities/User';
+
+export interface ListingChatNavigatePayload {
+  sellerId: string;
+  participantName: string;
+  participantAvatar?: string;
+  listingTitle?: string;
+  listingImage?: string;
+  listingId?: string;
+}
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const IMAGE_H = SCREEN_WIDTH * 0.85;
@@ -60,7 +71,7 @@ const IMAGE_H = SCREEN_WIDTH * 0.85;
 interface ListingDetailScreenProps {
   listingId?: string;
   onBack?: () => void;
-  onChat?: (sellerId: string) => void;
+  onChat?: (payload: ListingChatNavigatePayload) => void;
   onBuy?: (listingId: string) => void;
   onSellerProfile?: (sellerId: string) => void;
 }
@@ -75,6 +86,7 @@ export const ListingDetailScreen: React.FC<ListingDetailScreenProps> = ({
   const insets = useSafeAreaInsets();
   const { currentListing, getListingById, loadingState } = useListingStore();
   const { wishlistCache, checkInWishlist, addToWishlist, removeFromWishlist } = useWishlistStore();
+  const { user } = useAuthStore();
   const [activeImageIdx, setActiveImageIdx] = useState(0);
 
   const scrollY = useRef(new Animated.Value(0)).current;
@@ -82,6 +94,24 @@ export const ListingDetailScreen: React.FC<ListingDetailScreenProps> = ({
 
   const listing = currentListing;
   const isSaved = listing ? (wishlistCache[listing._id] ?? false) : false;
+  /** BE: sellerId (string | populate) hoặc alias `seller` — không truy cập biến `seller` không tồn tại */
+  const listingSeller = listing as Listing & { seller?: string | User };
+  const rawSeller = listing ? listingSeller.sellerId ?? listingSeller.seller : null;
+  const sellerIdResolved =
+    listing && rawSeller != null && rawSeller !== ''
+      ? typeof rawSeller === 'string'
+        ? rawSeller
+        : ((rawSeller as { _id?: string })?._id ?? '')
+      : '';
+  const sellerProfile =
+    listing && rawSeller != null && typeof rawSeller === 'object'
+      ? (rawSeller as User)
+      : null;
+  const isOwnListing = !!(
+    user?._id &&
+    sellerIdResolved &&
+    user._id === sellerIdResolved
+  );
 
   // Fetch listing data on mount
   useEffect(() => {
@@ -150,7 +180,6 @@ export const ListingDetailScreen: React.FC<ListingDetailScreenProps> = ({
   }
 
   const images = listing.media?.thumbnails ?? [];
-  const seller = listing.sellerId as any;
   const discount = listing.pricing?.originalPrice
     ? Math.round(
         (1 - (listing.pricing.amount ?? 0) / listing.pricing.originalPrice) * 100,
@@ -391,29 +420,33 @@ export const ListingDetailScreen: React.FC<ListingDetailScreenProps> = ({
           </View>
 
           {/* Seller info */}
-          {seller && (
+          {!!sellerIdResolved && (
             <TouchableOpacity
               style={styles.sellerCard}
               activeOpacity={0.8}
-              onPress={() => onSellerProfile?.(seller._id)}
+              onPress={() => onSellerProfile?.(sellerIdResolved)}
             >
-              <Image
-                source={{ uri: seller.avatar }}
-                style={styles.sellerAvatar}
-              />
+              {sellerProfile?.avatar ? (
+                <Image
+                  source={{ uri: sellerProfile.avatar }}
+                  style={styles.sellerAvatar}
+                />
+              ) : (
+                <View style={styles.sellerAvatar} />
+              )}
               <View style={styles.sellerInfo}>
-                <Text style={styles.sellerName}>{seller.fullName}</Text>
+                <Text style={styles.sellerName}>
+                  {sellerProfile?.fullName ?? 'Người bán'}
+                </Text>
                 <View style={styles.sellerMeta}>
                   <Star size={12} color={COLORS.star} fill={COLORS.star} />
                   <Text style={styles.sellerRating}>
-                    {seller.reputation?.rating}
+                    {sellerProfile?.reputation?.score != null
+                      ? String(sellerProfile.reputation.score)
+                      : '—'}
                   </Text>
                   <Text style={styles.sellerReviews}>
-                    ({seller.reputation?.totalReviews} đánh giá)
-                  </Text>
-                  <Text style={styles.sellerDot}>•</Text>
-                  <Text style={styles.sellerOrders}>
-                    {seller.reputation?.completedOrders} đã bán
+                    ({sellerProfile?.reputation?.reviewCount ?? 0} đánh giá)
                   </Text>
                 </View>
               </View>
@@ -434,21 +467,37 @@ export const ListingDetailScreen: React.FC<ListingDetailScreenProps> = ({
         </View>
       </Animated.ScrollView>
 
-      {/* Bottom CTA bar */}
+      {/* Bottom CTA bar — ẩn mua/chat khi đang xem tin của chính mình */}
       <View style={[styles.ctaBar, { paddingBottom: insets.bottom + SPACING.md }]}>
-        <TouchableOpacity
-          style={styles.chatBtn}
-          onPress={() => onChat?.(seller?._id)}
-        >
-          <MessageCircle size={22} color={COLORS.primary} />
-          <Text style={styles.chatBtnText}>Chat</Text>
-        </TouchableOpacity>
-        <Button
-          title="Mua ngay"
-          onPress={() => onBuy?.(listing._id!)}
-          icon={<ShoppingCart size={18} color={COLORS.white} />}
-          style={styles.buyBtn}
-        />
+        {isOwnListing ? (
+          <Text style={styles.ownListingHint}>Đây là tin đăng của bạn</Text>
+        ) : (
+          <>
+            <TouchableOpacity
+              style={styles.chatBtn}
+              onPress={() => {
+                if (!sellerIdResolved || !onChat) return;
+                onChat({
+                  sellerId: sellerIdResolved,
+                  participantName: sellerProfile?.fullName || 'Người bán',
+                  participantAvatar: sellerProfile?.avatar,
+                  listingTitle: listing.title,
+                  listingImage: listing.media?.thumbnails?.[0],
+                  listingId: listing._id,
+                });
+              }}
+            >
+              <MessageCircle size={22} color={COLORS.primary} />
+              <Text style={styles.chatBtnText}>Chat</Text>
+            </TouchableOpacity>
+            <Button
+              title="Mua ngay"
+              onPress={() => onBuy?.(listing._id!)}
+              icon={<ShoppingCart size={18} color={COLORS.white} />}
+              style={styles.buyBtn}
+            />
+          </>
+        )}
       </View>
     </View>
   );
@@ -730,8 +779,6 @@ const styles = StyleSheet.create({
     color: COLORS.text,
   },
   sellerReviews: { fontSize: FONT_SIZES.sm, color: COLORS.textLight },
-  sellerDot: { fontSize: FONT_SIZES.xs, color: COLORS.textLight },
-  sellerOrders: { fontSize: FONT_SIZES.sm, color: COLORS.textLight },
 
   // Safety
   safetyBox: {
@@ -783,6 +830,13 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
   },
   buyBtn: { flex: 1 },
+  ownListingHint: {
+    flex: 1,
+    textAlign: 'center',
+    fontSize: FONT_SIZES.md,
+    color: COLORS.textSecondary,
+    paddingVertical: SPACING.md,
+  },
 });
 
 export default ListingDetailScreen;

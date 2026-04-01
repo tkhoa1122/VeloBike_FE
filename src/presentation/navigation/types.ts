@@ -41,11 +41,26 @@ export type HomeStackParamList = {
   ListingDetail: { listingId: string };
   CreateOrder: { listingId: string };
   Payment: { orderId: string };
-  PaymentWebView: { paymentLink: string; orderCode: number; orderId: string };
-  PaymentSuccess: { orderId: string };
+  // orderId optional (dùng cho order), type phân biệt order vs subscription
+  PaymentWebView: { paymentLink: string; orderCode: number; orderId?: string; type?: 'order' | 'subscription' };
+  PaymentSuccess: { orderId: string; orderCode?: number };
   Orders: undefined;
-  OrderDetail: { orderId: string };
-  Chat: { conversationId?: string; participantName: string; participantAvatar?: string; listingTitle?: string; listingImage?: string };
+  OrderDetail: { orderId: string; initialOrder?: any };
+  Chat: {
+    conversationId?: string;
+    /** Người bán (khi người mua bắt đầu chat) */
+    sellerId?: string;
+    /** Người mua (khi người bán bắt đầu chat) */
+    buyerId?: string;
+    /** Đối tác khi mở từ danh sách hội thoại */
+    peerUserId?: string;
+    participantName: string;
+    participantAvatar?: string;
+    listingTitle?: string;
+    listingImage?: string;
+    listingId?: string;
+    orderId?: string;
+  };
   Notifications: undefined;
 };
 
@@ -57,11 +72,25 @@ export type SearchStackParamList = {
   ListingDetail: { listingId: string };
   CreateOrder: { listingId: string };
   Payment: { orderId: string };
-  PaymentWebView: { paymentLink: string; orderCode: number; orderId: string };
-  PaymentSuccess: { orderId: string };
+  PaymentWebView: { paymentLink: string; orderCode: number; orderId?: string; type?: 'order' | 'subscription' };
+  PaymentSuccess: { orderId: string; orderCode?: number };
   Orders: undefined;
-  OrderDetail: { orderId: string };
-  Chat: { conversationId?: string; participantName: string; participantAvatar?: string; listingTitle?: string; listingImage?: string };
+  OrderDetail: { orderId: string; initialOrder?: any };
+  Chat: {
+    conversationId?: string;
+    /** Người bán (khi người mua bắt đầu chat) */
+    sellerId?: string;
+    /** Người mua (khi người bán bắt đầu chat) */
+    buyerId?: string;
+    /** Đối tác khi mở từ danh sách hội thoại */
+    peerUserId?: string;
+    participantName: string;
+    participantAvatar?: string;
+    listingTitle?: string;
+    listingImage?: string;
+    listingId?: string;
+    orderId?: string;
+  };
 };
 
 // =============================================================================
@@ -69,7 +98,21 @@ export type SearchStackParamList = {
 // =============================================================================
 export type MessagesStackParamList = {
   Messages: undefined;
-  Chat: { conversationId?: string; participantName: string; participantAvatar?: string; listingTitle?: string; listingImage?: string };
+  Chat: {
+    conversationId?: string;
+    /** Người bán (khi người mua bắt đầu chat) */
+    sellerId?: string;
+    /** Người mua (khi người bán bắt đầu chat) */
+    buyerId?: string;
+    /** Đối tác khi mở từ danh sách hội thoại */
+    peerUserId?: string;
+    participantName: string;
+    participantAvatar?: string;
+    listingTitle?: string;
+    listingImage?: string;
+    listingId?: string;
+    orderId?: string;
+  };
 };
 
 // =============================================================================
@@ -80,8 +123,40 @@ export type ProfileStackParamList = {
   EditProfile: undefined;
   KycVerification: undefined;
   Orders: undefined;
-  OrderDetail: { orderId: string };
+  OrderDetail: { orderId: string; initialOrder?: any };
+  Payment: { orderId: string };
+  PaymentWebView: { paymentLink: string; orderCode: number; orderId?: string; type?: 'order' | 'subscription' };
+  PaymentSuccess: { orderId: string; orderCode?: number };
+  SubscriptionSuccess: { orderCode: number }; // ✅ Màn hình thành công sau thanh toán gói
   Notifications: undefined;
   Settings: undefined;
+  SubscriptionPlans: undefined;
+  ManageSubscription: undefined;
+  Chat: {
+    conversationId?: string;
+    /** Người bán (khi người mua bắt đầu chat) */
+    sellerId?: string;
+    /** Người mua (khi người bán bắt đầu chat) */
+    buyerId?: string;
+    /** Đối tác khi mở từ danh sách hội thoại */
+    peerUserId?: string;
+    participantName: string;
+    participantAvatar?: string;
+    listingTitle?: string;
+    listingImage?: string;
+    listingId?: string;
+    orderId?: string;
+  };
+  CreateOrder: { listingId: string };
+  // Buyer screens
+  BuyerWallet: undefined;
+  BuyerPaymentHistory: undefined;
+  // Seller screens
+  SellerDashboard: undefined;
+  SellerListings: undefined;
+  SellerCreateListing: undefined;
+  SellerOrders: undefined;
+  SellerWallet: undefined;
+  /** Xem chi tiết tin (cùng stack Profile — seller xem tin của mình) */
+  ListingDetail: { listingId: string };
 };
-

@@ -303,7 +303,7 @@ export class AuthRepositoryImpl implements AuthRepository {
    */
   private mapUserModelToEntity(model: UserModel): User {
     return {
-      _id: model._id,
+      _id: model._id ?? model.id ?? '',
       email: model.email,
       fullName: model.fullName,
       avatar: model.avatar,

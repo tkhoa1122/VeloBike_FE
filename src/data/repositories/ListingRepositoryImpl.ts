@@ -6,6 +6,7 @@ import {
   ListingSearchParams, 
   BoostListingParams 
 } from '../../domain/entities/Listing';
+import type { User } from '../../domain/entities/User';
 import { ApiResponse, PaginatedResponse } from '../../domain/entities/Common';
 import { ListingApiClient } from '../apis/ListingApiClient';
 import { ListingModel } from '../models/ListingModel';
@@ -324,6 +325,20 @@ export class ListingRepositoryImpl implements ListingRepository {
   }
 
   /**
+   * Giữ nguyên seller populate (object) để UI có fullName/avatar/reputation; hỗ trợ alias `seller`.
+   */
+  private normalizeSellerId(model: ListingModel): string | User {
+    const raw = model.sellerId ?? model.seller;
+    if (raw == null || raw === '') {
+      return '';
+    }
+    if (typeof raw === 'string') {
+      return raw;
+    }
+    return raw as unknown as User;
+  }
+
+  /**
    * Map ListingModel to Listing entity
    */
   private mapListingModelToEntity(model: ListingModel): Listing {
@@ -344,7 +359,7 @@ export class ListingRepositoryImpl implements ListingRepository {
       pricing: model.pricing,
       media: model.media,
       location: model.location,
-      sellerId: typeof model.sellerId === 'string' ? model.sellerId : model.sellerId._id,
+      sellerId: this.normalizeSellerId(model),
       views: model.views,
       saves: model.saves,
       boostedUntil: model.boostedUntil ? new Date(model.boostedUntil) : undefined,

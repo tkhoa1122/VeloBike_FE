@@ -14,6 +14,8 @@ import {
   StatusBar,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   UserCircle,
   LogOut,
@@ -29,6 +31,7 @@ import {
   Shield,
   Store,
   ShieldCheck,
+  Crown,
 } from 'lucide-react-native';
 import {
   COLORS,
@@ -46,6 +49,7 @@ import { useNotificationStore } from '../../viewmodels/NotificationStore';
 import { Button } from '../../components/common/Button';
 import { container } from '../../../di/Container';
 import Toast from 'react-native-toast-message';
+import { ENV } from '../../../config/environment';
 
 interface ProfileScreenProps {
   onLogout?: () => void;
@@ -54,6 +58,9 @@ interface ProfileScreenProps {
   onOrders?: () => void;
   onNotifications?: () => void;
   onSettings?: () => void;
+  onSellerDashboard?: () => void;
+  onSubscriptionPlans?: () => void;
+  onManageSubscription?: () => void;
 }
 
 export const ProfileScreen: React.FC<ProfileScreenProps> = ({
@@ -63,6 +70,9 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   onOrders,
   onNotifications,
   onSettings,
+  onSellerDashboard,
+  onSubscriptionPlans,
+  onManageSubscription,
 }) => {
   const insets = useSafeAreaInsets();
   const { user, logout } = useAuthStore();
@@ -71,10 +81,54 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   const { unreadCount } = useNotificationStore();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const [upgradeInProgress, setUpgradeInProgress] = React.useState(false);
+  const [subscriptionPlan, setSubscriptionPlan] = React.useState<string>('FREE');
 
   useEffect(() => {
     Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }).start();
   }, [fadeAnim]);
+
+  // Load subscription plan when user role changes
+  useEffect(() => {
+    if (user?.role === 'SELLER') {
+      loadSubscriptionPlan();
+    }
+  }, [user?.role]);
+
+  // Reload subscription when screen comes back into focus (after subscription change)
+  useFocusEffect(
+    useCallback(() => {
+      if (user?.role === 'SELLER') {
+        loadSubscriptionPlan();
+      }
+    }, [user?.role])
+  );
+
+  const loadSubscriptionPlan = async () => {
+    try {
+      // Only load for sellers
+      if (user?.role !== 'SELLER') return;
+
+      const token = await AsyncStorage.getItem('access_token');
+      if (!token) return;
+
+      const response = await fetch(`${ENV.API_BASE_URL}/subscriptions/my-subscription`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      const result = await response.json();
+      console.log('Subscription result:', result);
+      
+      if (result.success && result.data?.subscription?.planType) {
+        setSubscriptionPlan(result.data.subscription.planType);
+        console.log('Subscription plan loaded:', result.data.subscription.planType);
+      }
+    } catch (error) {
+      console.error('Failed to load subscription plan:', error);
+      // Keep default FREE if error
+    }
+  };
 
   const handleLogout = useCallback(async () => {
     await logout();
@@ -148,9 +202,9 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
 
   // Real stats from stores
   const stats = [
-    { label: 'Đã mua', value: orderCount?.toString() || '0' },
-    { label: 'Yêu thích', value: wishlistCount?.toString() || '0' },
-    { label: 'Đánh giá', value: user?.reputation?.rating?.toFixed(1) || '0.0' },
+    { label: 'Đã mua', value: typeof orderCount === 'number' ? orderCount.toString() : '0' },
+    { label: 'Yêu thích', value: typeof wishlistCount === 'number' ? wishlistCount.toString() : '0' },
+    { label: 'Đánh giá', value: typeof user?.reputation?.score === 'number' ? user.reputation.score.toFixed(1) : '0.0' },
   ];
 
   interface MenuItem {
@@ -159,6 +213,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
     onPress?: () => void;
     badge?: string;
     accent?: boolean;
+    disabled?: boolean;
   }
 
   interface MenuSection {
@@ -170,52 +225,55 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   const buildMenuSections = (): MenuSection[] => {
     const userRole = user?.role;
     
-    // Seller mode: different menu
+    console.log('Building menu sections:', { userRole, subscriptionPlan });
+    
+    // Seller mode: show subscription management
     if (userRole === 'SELLER') {
+      const sellerItems: MenuItem[] = [
+        { icon: Store, label: 'Bảng điều khiển bán hàng', onPress: onSellerDashboard, accent: true },
+      ];
+
+      // Add subscription menu based on plan
+      // FREE plan: show upgrade option
+      if (subscriptionPlan === 'FREE') {
+        console.log('Showing upgrade option (FREE plan)');
+        sellerItems.push({
+          icon: Crown,
+          label: 'Nâng cấp gói Premium',
+          onPress: onSubscriptionPlans,
+          accent: true,
+        });
+      } else {
+        // Paid plan: show manage option
+        console.log('Showing manage option (Paid plan)');
+        sellerItems.push({
+          icon: Crown,
+          label: 'Quản lý gói đăng ký',
+          onPress: onManageSubscription,
+        });
+      }
+
       return [
         {
-          title: 'Giao dịch',
-          items: [
-            { icon: ShoppingBag, label: 'Đơn hàng của tôi', onPress: onOrders, badge: orderCount > 0 ? orderCount?.toString() : undefined },
-            { icon: Heart, label: 'Sản phẩm yêu thích', onPress: () => {} },
-            { icon: Star, label: 'Đánh giá của tôi', onPress: () => Toast.show({ type: 'info', text1: 'Tính năng sắp ra mắt', text2: 'Chức năng xem đánh giá sẽ được cập nhật' }) },
-          ],
-        },
-        {
           title: 'Bán hàng',
-          items: [
-            { 
-              icon: Store, 
-              label: 'Chuyển sang mua hàng', 
-              onPress: handleSwitchToBuyer, 
-              accent: true 
-            },
-          ],
+          items: sellerItems,
         },
         {
           title: 'Cài đặt',
           items: [
             { icon: Bell, label: 'Thông báo', onPress: onNotifications, badge: unreadCount > 0 ? unreadCount?.toString() : undefined },
             { icon: Settings, label: 'Cài đặt', onPress: onSettings },
-            { icon: Shield, label: 'Bảo mật & Quyền riêng tư', onPress: () => {} },
-          ],
-        },
-        {
-          title: 'Hỗ trợ',
-          items: [
-            { icon: HelpCircle, label: 'Trung tâm trợ giúp', onPress: () => {} },
-            { icon: FileText, label: 'Điều khoản sử dụng', onPress: () => {} },
           ],
         },
       ];
     }
 
-    // Buyer mode: original menu with seller upgrade option
+    // Buyer mode: minimal menu with seller registration option
     const kycStatus = user?.kycStatus;
     
     let sellerSectionItems: MenuItem[] = [];
     
-    if (kycStatus === 'pending') {
+    if (kycStatus === 'PENDING') {
       sellerSectionItems = [
         { 
           icon: ShieldCheck, 
@@ -227,7 +285,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
           }) 
         },
       ];
-    } else if (kycStatus === 'rejected') {
+    } else if (kycStatus === 'REJECTED') {
       sellerSectionItems = [
         { 
           icon: Shield, 
@@ -247,8 +305,6 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
         title: 'Giao dịch',
         items: [
           { icon: ShoppingBag, label: 'Đơn hàng của tôi', onPress: onOrders, badge: orderCount > 0 ? orderCount?.toString() : undefined },
-          { icon: Heart, label: 'Sản phẩm yêu thích', onPress: () => {} },
-          { icon: Star, label: 'Đánh giá của tôi', onPress: () => Toast.show({ type: 'info', text1: 'Tính năng sắp ra mắt', text2: 'Chức năng xem đánh giá sẽ được cập nhật' }) },
         ],
       },
       {
@@ -260,14 +316,6 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
         items: [
           { icon: Bell, label: 'Thông báo', onPress: onNotifications, badge: unreadCount > 0 ? unreadCount?.toString() : undefined },
           { icon: Settings, label: 'Cài đặt', onPress: onSettings },
-          { icon: Shield, label: 'Bảo mật & Quyền riêng tư', onPress: () => {} },
-        ],
-      },
-      {
-        title: 'Hỗ trợ',
-        items: [
-          { icon: HelpCircle, label: 'Trung tâm trợ giúp', onPress: () => {} },
-          { icon: FileText, label: 'Điều khoản sử dụng', onPress: () => {} },
         ],
       },
     ];
@@ -295,7 +343,30 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
               </TouchableOpacity>
             </View>
             <Text style={styles.userName}>{user?.fullName || 'Người dùng VeloBike'}</Text>
+            
+            {/* Subscription Badge */}
+            {user?.role === 'SELLER' && (
+              <View
+                style={[
+                  styles.subscriptionBadge,
+                  subscriptionPlan === 'FREE' ? styles.subscriptionBadgeFree : styles.subscriptionBadgePremium,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.subscriptionBadgeText,
+                    subscriptionPlan === 'FREE' ? styles.subscriptionBadgeTextFree : styles.subscriptionBadgeTextPremium,
+                  ]}
+                >
+                  {subscriptionPlan === 'FREE' ? 'FREE' : 'PREMIUM'}
+                </Text>
+              </View>
+            )}
+            
             <Text style={styles.userEmail}>{user?.email || ''}</Text>
+            <Text style={styles.userRole}>
+              {user?.role === 'SELLER' ? 'Người bán hàng' : 'Khách hàng'}
+            </Text>
             <TouchableOpacity style={styles.editProfileBtn} onPress={onEditProfile}>
               <Edit3 size={14} color={COLORS.primary} />
               <Text style={styles.editProfileText}>Chỉnh sửa hồ sơ</Text>
@@ -322,20 +393,20 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
                   return (
                     <TouchableOpacity
                       key={iIdx}
-                      style={[styles.menuItem, iIdx < section.items.length - 1 && styles.menuItemBorder]}
-                      activeOpacity={0.7}
-                      onPress={item.onPress}
+                      style={[styles.menuItem, iIdx < section.items.length - 1 && styles.menuItemBorder, item.disabled && styles.menuItemDisabled]}
+                      activeOpacity={item.disabled ? 1 : 0.7}
+                      onPress={item.disabled ? undefined : item.onPress}
                     >
-                      <View style={[styles.menuIconWrap, item.accent && styles.menuIconAccent]}>
-                        <Icon size={18} color={item.accent ? COLORS.accent : COLORS.primary} />
+                      <View style={[styles.menuIconWrap, item.accent && styles.menuIconAccent, item.disabled && styles.menuIconDisabled]}>
+                        <Icon size={18} color={item.disabled ? COLORS.textLight : (item.accent ? COLORS.accent : COLORS.primary)} />
                       </View>
-                      <Text style={[styles.menuLabel, item.accent && styles.menuLabelAccent]}>{item.label}</Text>
+                      <Text style={[styles.menuLabel, item.accent && styles.menuLabelAccent, item.disabled && styles.menuLabelDisabled]}>{item.label}</Text>
                       {item.badge && (
                         <View style={styles.menuBadge}>
                           <Text style={styles.menuBadgeText}>{item.badge}</Text>
                         </View>
                       )}
-                      <ChevronRight size={18} color={COLORS.textLight} />
+                      <ChevronRight size={18} color={item.disabled ? COLORS.border : COLORS.textLight} />
                     </TouchableOpacity>
                   );
                 })}
@@ -371,8 +442,33 @@ const styles = StyleSheet.create({
   avatarPlaceholder: { width: 80, height: 80, borderRadius: 40, backgroundColor: COLORS.primarySurface, justifyContent: 'center', alignItems: 'center' },
   editAvatarBtn: { position: 'absolute', bottom: 0, right: -2, width: 28, height: 28, borderRadius: 14, backgroundColor: COLORS.primary, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: COLORS.white },
   userName: { fontSize: FONT_SIZES.xl, fontWeight: FONT_WEIGHTS.bold, color: COLORS.text },
+  subscriptionBadge: {
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 4,
+    borderRadius: RADIUS.full,
+    marginTop: SPACING.xs,
+    alignSelf: 'center',
+  },
+  subscriptionBadgeFree: {
+    backgroundColor: '#E5E7EB', // Gray
+  },
+  subscriptionBadgePremium: {
+    backgroundColor: '#FEF3C7', // Gold/Amber light
+  },
+  subscriptionBadgeText: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: FONT_WEIGHTS.bold,
+    letterSpacing: 0.8,
+  },
+  subscriptionBadgeTextFree: {
+    color: '#6B7280', // Gray
+  },
+  subscriptionBadgeTextPremium: {
+    color: '#D97706', // Gold/Amber dark
+  },
   userEmail: { fontSize: FONT_SIZES.md, color: COLORS.textSecondary, marginTop: 2 },
-  editProfileBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: SPACING.md, paddingHorizontal: SPACING.base, paddingVertical: SPACING.sm, borderRadius: RADIUS.full, borderWidth: 1, borderColor: COLORS.primary },
+  userRole: { fontSize: FONT_SIZES.sm, color: COLORS.primary, fontWeight: FONT_WEIGHTS.semibold, marginTop: 4 },
+  editProfileBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: SPACING.lg, paddingHorizontal: SPACING.base, paddingVertical: SPACING.sm, borderRadius: RADIUS.full, borderWidth: 1, borderColor: COLORS.primary },
   editProfileText: { fontSize: FONT_SIZES.sm, fontWeight: FONT_WEIGHTS.semibold, color: COLORS.primary },
   statsRow: { flexDirection: 'row', backgroundColor: COLORS.white, marginTop: 1, paddingVertical: SPACING.base },
   statItem: { flex: 1, alignItems: 'center' },
@@ -384,10 +480,13 @@ const styles = StyleSheet.create({
   menuCard: { backgroundColor: COLORS.white, borderRadius: RADIUS.lg, ...SHADOWS.sm },
   menuItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: SPACING.base, paddingVertical: SPACING.md, gap: SPACING.md },
   menuItemBorder: { borderBottomWidth: 1, borderBottomColor: COLORS.borderLight },
+  menuItemDisabled: { opacity: 0.6 },
   menuIconWrap: { width: 36, height: 36, borderRadius: RADIUS.md, backgroundColor: COLORS.primarySurface, justifyContent: 'center', alignItems: 'center' },
   menuIconAccent: { backgroundColor: COLORS.accentSurface },
+  menuIconDisabled: { backgroundColor: COLORS.surface },
   menuLabel: { flex: 1, fontSize: FONT_SIZES.base, fontWeight: FONT_WEIGHTS.medium, color: COLORS.text },
   menuLabelAccent: { color: COLORS.accentDark, fontWeight: FONT_WEIGHTS.semibold },
+  menuLabelDisabled: { color: COLORS.textLight, fontWeight: FONT_WEIGHTS.regular },
   menuBadge: { backgroundColor: COLORS.error, borderRadius: RADIUS.full, minWidth: 20, height: 20, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 5 },
   menuBadgeText: { fontSize: 11, fontWeight: FONT_WEIGHTS.bold, color: COLORS.white },
   logoutSection: { paddingHorizontal: SPACING.xl, marginTop: SPACING['2xl'] },

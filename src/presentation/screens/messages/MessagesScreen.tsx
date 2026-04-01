@@ -30,7 +30,12 @@ import { useMessageStore } from '../../viewmodels/MessageStore';
 import type { ConversationEntry } from '../../../data/repositories/MessageRepositoryImpl';
 
 interface MessagesScreenProps {
-  onConversationPress?: (conversationId: string, participantName: string) => void;
+  onConversationPress?: (
+    conversationId: string,
+    participantName: string,
+    participantAvatar?: string,
+    participantUserId?: string,
+  ) => void;
 }
 
 export const MessagesScreen: React.FC<MessagesScreenProps> = ({ onConversationPress }) => {
@@ -51,7 +56,13 @@ export const MessagesScreen: React.FC<MessagesScreenProps> = ({ onConversationPr
   const totalUnread = conversations.reduce((acc, c) => acc + c.unreadCount, 0);
 
   const renderItem = useCallback(({ item }: { item: ConversationEntry }) => (
-    <TouchableOpacity style={styles.convItem} activeOpacity={0.7} onPress={() => onConversationPress?.(item._id, item.participantName)}>
+    <TouchableOpacity
+      style={styles.convItem}
+      activeOpacity={0.7}
+      onPress={() =>
+        onConversationPress?.(item._id, item.participantName, item.participantAvatar, item.participantId)
+      }
+    >
       <View style={styles.avatarWrap}>
         {item.participantAvatar ? (
           <Image source={{ uri: item.participantAvatar }} style={styles.avatar} />
@@ -100,7 +111,7 @@ export const MessagesScreen: React.FC<MessagesScreenProps> = ({ onConversationPr
         <View style={styles.empty}>
           <MessageCircle size={ICON_SIZES['3xl']} color={COLORS.textLight} />
           <Text style={styles.emptyTitle}>Chưa có tin nhắn</Text>
-          <Text style={styles.emptySub}>Bắt đầu trò chuyện với người bán để hỏi về xe!</Text>
+          <Text style={styles.emptySub}>Trò chuyện với người mua hoặc người bán về tin đăng và đơn hàng.</Text>
         </View>
       ) : (
         <FlatList

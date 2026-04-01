@@ -2,7 +2,9 @@
  * User Model - Maps server response to domain entity
  */
 export interface UserModel {
-  _id: string;
+  _id?: string;
+  /** Một endpoint BE trả `id` thay vì `_id` */
+  id?: string;
   email: string;
   fullName: string;
   avatar?: string;

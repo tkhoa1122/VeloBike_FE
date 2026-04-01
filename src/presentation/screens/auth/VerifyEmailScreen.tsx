@@ -339,7 +339,10 @@ const styles = StyleSheet.create({
 
   // Actions
   actionSection: {
+    width: '100%',
     alignItems: 'center',
+    marginHorizontal: -SPACING.xl,
+    paddingHorizontal: SPACING.xl,
   },
   verifyButton: {
     width: '100%',

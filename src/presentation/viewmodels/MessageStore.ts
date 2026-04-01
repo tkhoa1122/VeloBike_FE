@@ -3,6 +3,7 @@ import { LoadingState } from '../../domain/entities/Common';
 import { container } from '../../di/Container';
 import type { ConversationEntry, MessageEntry } from '../../data/repositories/MessageRepositoryImpl';
 import type { ChatbotConversation, SendChatbotMessageData } from '../../domain/entities/Message';
+import { useAuthStore } from './AuthStore';
 
 interface MessageState {
   conversations: ConversationEntry[];
@@ -38,7 +39,9 @@ export const useMessageStore = create<MessageState>((set, get) => ({
     set({ loadingState: 'loading', error: null });
     try {
       const repo = container().messageRepository;
-      const result = await repo.getConversations();
+      const u = useAuthStore.getState().user;
+      const currentUserId = u?._id ?? (u as { id?: string } | null)?.id ?? '';
+      const result = await repo.getConversations(undefined, currentUserId);
       if (result.success) {
         set({ conversations: result.data, loadingState: 'success' });
       } else {

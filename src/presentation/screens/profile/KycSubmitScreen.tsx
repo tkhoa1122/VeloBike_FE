@@ -188,23 +188,28 @@ export default function KycSubmitScreen({ onBack }: KycSubmitScreenProps) {
       // Update AuthStore KYC status  
       useAuthStore.getState().submitKycSuccess();
 
-      // If already verified, directly upgrade to seller
-      if (isAlreadyVerified) {
-        setSubmitting(false);
-        
+      // Auto-upgrade to seller after KYC (success or already verified)
+      const performUpgrade = async () => {
         try {
-          console.log('🔄 KYC already verified, auto-upgrading to seller...');
+          console.log('🔄 Auto-upgrading to seller after KYC...');
           const upgradeResult = await container().authApiClient.upgradeToSeller();
+          console.log('✅ Upgrade response:', upgradeResult);
           
-          // Refresh user immediately to get new role
+          // Refresh user immediately to get new role + wait a bit for DB
+          console.log('📥 Fetching fresh user data...');
           const getCurrentUser = useAuthStore.getState().getCurrentUser as any;
           await getCurrentUser(false, true);
+          
+          // Add small delay to ensure state propagation
+          await new Promise(resolve => setTimeout(() => resolve(undefined), 300));
 
           // Check if role actually updated
           const updatedUser = useAuthStore.getState().user;
+          console.log('👤 Updated user:', { role: updatedUser?.role, email: updatedUser?.email });
           const isNowSeller = updatedUser?.role === 'SELLER';
           
           if (isNowSeller) {
+            console.log('✅ Role upgrade successful!');
             Toast.show({
               type: 'success',
               text1: 'Lên cấp thành công',
@@ -213,7 +218,7 @@ export default function KycSubmitScreen({ onBack }: KycSubmitScreenProps) {
             onBack?.();
           } else {
             // Role not updated - backend might have failed
-            console.warn('⚠️ Role not updated after upgrade call');
+            console.warn('⚠️ Role not updated after upgrade call. Current role:', updatedUser?.role);
             Toast.show({
               type: 'success',
               text1: 'KYC đã được xét duyệt',
@@ -226,10 +231,13 @@ export default function KycSubmitScreen({ onBack }: KycSubmitScreenProps) {
           // Even if upgrade fails, try to refresh
           const getCurrentUser = useAuthStore.getState().getCurrentUser as any;
           await getCurrentUser(false, true);
+          await new Promise(resolve => setTimeout(() => resolve(undefined), 300));
           
           // Check if user is seller despite error
           const currentUser = useAuthStore.getState().user;
+          console.log('💾 Current user after error:', { role: currentUser?.role });
           if (currentUser?.role === 'SELLER') {
+            console.log('✅ Despite error, user is now SELLER!');
             Toast.show({
               type: 'success',
               text1: 'Lên cấp thành công',
@@ -245,6 +253,12 @@ export default function KycSubmitScreen({ onBack }: KycSubmitScreenProps) {
           }
           onBack?.();
         }
+      };
+
+      // If already verified or submit successful, upgrade to seller
+      if (isAlreadyVerified || result.success) {
+        setSubmitting(false);
+        await performUpgrade();
         return;
       }
 
