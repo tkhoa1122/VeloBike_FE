@@ -9,11 +9,29 @@ export class ReviewRepositoryImpl implements ReviewRepository {
   async createReview(data: CreateReviewData): Promise<ApiResponse<Review>> {
     try {
       const response = await this.apiClient.createReview(data);
-      if (response.success && response.data) {
+      const isSuccess = response.success !== false && !response.error;
+      const responseData = response.data as Record<string, unknown> | undefined;
+      const payload = responseData?.review ?? responseData ?? response.review ?? response;
+
+      if (isSuccess) {
         return {
           success: true,
-          data: this.mapReviewFromApi(response.data),
-          message: response.message,
+          data: payload
+            ? this.mapReviewFromApi(payload)
+            : {
+                _id: '',
+                orderId: data.orderId,
+                buyerId: '',
+                sellerId: '',
+                rating: data.rating,
+                comment: data.comment,
+                categories: data.categories,
+                photos: data.photos,
+                helpful: 0,
+                notHelpful: 0,
+                createdAt: new Date(),
+              },
+          message: response.message || 'Tạo đánh giá thành công',
         };
       }
       return {
@@ -31,7 +49,16 @@ export class ReviewRepositoryImpl implements ReviewRepository {
   async checkReviewed(orderId: string): Promise<ApiResponse<boolean>> {
     try {
       const r = await this.apiClient.checkReviewed(orderId);
-      return { success: r.success, data: !!r.reviewed };
+      const reviewedRaw =
+        (r as any).reviewed ??
+        (r as any).data?.reviewed ??
+        (r as any).data?.isReviewed ??
+        (typeof (r as any).data === 'boolean' ? (r as any).data : undefined);
+
+      return {
+        success: (r as any).success !== false,
+        data: reviewedRaw === true,
+      };
     } catch (error) {
       return {
         success: false,

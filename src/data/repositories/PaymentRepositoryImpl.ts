@@ -11,11 +11,26 @@ export class PaymentRepositoryImpl implements PaymentRepository {
   }>> {
     try {
       const response = await this.apiClient.createPaymentLink(orderId);
+
+      const paymentLink =
+        response.paymentLink ||
+        response.checkoutUrl ||
+        response.data?.paymentLink ||
+        response.data?.checkoutUrl;
+      const orderCode = response.orderCode || response.data?.orderCode;
+
+      if (!response.success || !paymentLink || !orderCode) {
+        return {
+          success: false,
+          error: response.message || 'Không thể tạo link thanh toán',
+        };
+      }
+
       return {
-        success: response.success,
+        success: true,
         data: {
-          paymentLink: response.paymentLink,
-          orderCode: response.orderCode,
+          paymentLink,
+          orderCode,
         },
         message: response.message,
       };

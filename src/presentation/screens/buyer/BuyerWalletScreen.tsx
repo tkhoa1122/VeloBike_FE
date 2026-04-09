@@ -19,7 +19,9 @@ import {
   Image,
   Alert,
   RefreshControl,
+  StatusBar,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowLeft, Wallet, TrendingUp, Download, X, AlertCircle, CheckCircle, Clock } from 'lucide-react-native';
 import { COLORS, SPACING, FONT_SIZES, FONT_WEIGHTS, SHADOWS } from '../../../config/theme';
 import { WalletApiClient, type WalletTransaction, type WalletWithdrawal, type BankAccount } from '../../../data/apis/WalletApiClient';
@@ -46,6 +48,7 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 export const BuyerWalletScreen: React.FC<BuyerWalletScreenProps> = ({ onBack }) => {
+  const insets = useSafeAreaInsets();
   const [balance, setBalance] = useState(0);
   const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
   const [withdrawals, setWithdrawals] = useState<WalletWithdrawal[]>([]);
@@ -63,11 +66,11 @@ export const BuyerWalletScreen: React.FC<BuyerWalletScreenProps> = ({ onBack }) 
   });
   const [withdrawLoading, setWithdrawLoading] = useState(false);
 
-  // Proof Modal States
-  const [proofModal, setProofModal] = useState<{ image?: string; note?: string } | null>(null);
+  // Withdrawal Detail Modal
+  const [detailModal, setDetailModal] = useState<WalletWithdrawal | null>(null);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
 
-  const walletClient = container.get<WalletApiClient>('WalletApiClient');
+  const walletClient = container().walletApiClient;
 
   const fetchData = useCallback(async () => {
     try {
@@ -253,7 +256,8 @@ export const BuyerWalletScreen: React.FC<BuyerWalletScreenProps> = ({ onBack }) 
   if (loading) {
     return (
       <View style={styles.container}>
-        <View style={styles.header}>
+        <StatusBar barStyle="dark-content" backgroundColor={COLORS.white} />
+        <View style={[styles.header, { paddingTop: insets.top + SPACING.md }]}>
           <TouchableOpacity onPress={onBack} style={styles.backButton}>
             <ArrowLeft size={24} color={COLORS.text} />
           </TouchableOpacity>
@@ -270,8 +274,9 @@ export const BuyerWalletScreen: React.FC<BuyerWalletScreenProps> = ({ onBack }) 
 
   return (
     <View style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.white} />
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + SPACING.md }]}>
         <TouchableOpacity onPress={onBack} style={styles.backButton}>
           <ArrowLeft size={24} color={COLORS.text} />
         </TouchableOpacity>
@@ -309,47 +314,61 @@ export const BuyerWalletScreen: React.FC<BuyerWalletScreenProps> = ({ onBack }) 
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Lịch sử rút tiền</Text>
             <View style={styles.card}>
-              {withdrawals.map((w) => (
-                <View key={w.id} style={styles.withdrawalItem}>
+              {withdrawals.map((w, index) => (
+                <View key={w.id} style={[styles.withdrawalItem, index === withdrawals.length - 1 && { borderBottomWidth: 0 }]}>
+                  {/* Header row: date + status */}
                   <View style={styles.withdrawalRow}>
-                    <Text style={styles.withdrawalDate}>{formatDate(w.requestedAt)}</Text>
+                    <Text style={styles.withdrawalDate}>{formatDateTime(w.requestedAt)}</Text>
                     <View style={[styles.statusBadge, { backgroundColor: `${getStatusColor(w.status)}20` }]}>
                       <Text style={[styles.statusText, { color: getStatusColor(w.status) }]}>
                         {STATUS_LABELS[w.status] || w.status}
                       </Text>
                     </View>
                   </View>
-                  <View style={styles.withdrawalRow}>
-                    <Text style={styles.withdrawalLabel}>Số tiền:</Text>
-                    <Text style={styles.withdrawalAmount}>{formatCurrency(w.amount)}</Text>
-                  </View>
-                  <View style={styles.withdrawalRow}>
-                    <Text style={styles.withdrawalLabel}>Phí:</Text>
-                    <Text style={styles.withdrawalFee}>{formatCurrency(w.fee)}</Text>
-                  </View>
-                  <View style={styles.withdrawalRow}>
-                    <Text style={styles.withdrawalLabel}>Tài khoản:</Text>
-                    <Text style={styles.withdrawalBank}>{w.bankAccount}</Text>
-                  </View>
-                  {w.status === 'PENDING' && (
-                    <TouchableOpacity
-                      style={styles.cancelButton}
-                      onPress={() => handleCancelWithdrawal(w.id)}
-                      disabled={cancellingId === w.id}
-                    >
-                      <Text style={styles.cancelButtonText}>
-                        {cancellingId === w.id ? 'Đang hủy...' : 'Hủy yêu cầu'}
-                      </Text>
-                    </TouchableOpacity>
+
+                  {/* Amount */}
+                  <Text style={styles.withdrawalAmountLarge}>
+                    -{formatCurrency(w.amount)}
+                  </Text>
+
+                  {/* Bank info */}
+                  <Text style={styles.withdrawalBankInline}>
+                    {w.bankAccountRaw?.bankName
+                      ? `${w.bankAccountRaw.bankName} · ${w.bankAccount}`
+                      : w.bankAccount}
+                  </Text>
+
+                  {/* Proof indicator */}
+                  {w.transferProof && (
+                    <View style={styles.proofIndicator}>
+                      <CheckCircle size={12} color={COLORS.success} />
+                      <Text style={styles.proofIndicatorText}>Admin đã gửi chứng từ</Text>
+                    </View>
                   )}
-                  {w.status === 'COMPLETED' && (w.transferProof || w.note) && (
+
+                  {/* Action row */}
+                  <View style={styles.withdrawalActions}>
                     <TouchableOpacity
-                      style={styles.viewProofButton}
-                      onPress={() => setProofModal({ image: w.transferProof, note: w.note })}
+                      style={styles.detailButton}
+                      onPress={() => setDetailModal(w)}
                     >
-                      <Text style={styles.viewProofText}>Xem chứng từ</Text>
+                      <TrendingUp size={14} color={COLORS.primary} />
+                      <Text style={styles.detailButtonText}>Xem chi tiết</Text>
                     </TouchableOpacity>
-                  )}
+
+                    {w.status === 'PENDING' && (
+                      <TouchableOpacity
+                        style={styles.cancelWithdrawButton}
+                        onPress={() => handleCancelWithdrawal(w.id)}
+                        disabled={cancellingId === w.id}
+                      >
+                        <X size={14} color={COLORS.error} />
+                        <Text style={styles.cancelWithdrawButtonText}>
+                          {cancellingId === w.id ? 'Đang hủy...' : 'Hủy yêu cầu'}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
                 </View>
               ))}
             </View>
@@ -482,25 +501,128 @@ export const BuyerWalletScreen: React.FC<BuyerWalletScreenProps> = ({ onBack }) 
         </View>
       </Modal>
 
-      {/* Proof Modal */}
-      <Modal visible={!!proofModal} animationType="fade" transparent>
+      {/* Withdrawal Detail Modal */}
+      <Modal visible={!!detailModal} animationType="slide" transparent onRequestClose={() => setDetailModal(null)}>
         <View style={styles.modalOverlay}>
-          <View style={styles.proofModalContent}>
+          <View style={styles.detailModalContent}>
+            {/* Modal Header */}
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Chứng từ chuyển khoản</Text>
-              <TouchableOpacity onPress={() => setProofModal(null)}>
-                <X size={24} color={COLORS.text} />
+              <Text style={styles.modalTitle}>Chi tiết rút tiền</Text>
+              <TouchableOpacity onPress={() => setDetailModal(null)} style={styles.closeButton}>
+                <X size={22} color={COLORS.text} />
               </TouchableOpacity>
             </View>
-            {proofModal?.image && (
-              <Image source={{ uri: proofModal.image }} style={styles.proofImage} resizeMode="contain" />
-            )}
-            {proofModal?.note && (
-              <View style={styles.noteBox}>
-                <Text style={styles.noteLabel}>Ghi chú từ admin:</Text>
-                <Text style={styles.noteText}>{proofModal.note}</Text>
-              </View>
-            )}
+
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {detailModal && (
+                <>
+                  {/* Status Banner */}
+                  <View style={[styles.statusBanner, { backgroundColor: `${getStatusColor(detailModal.status)}15`, borderColor: `${getStatusColor(detailModal.status)}40` }]}>
+                    {detailModal.status === 'COMPLETED' ? (
+                      <CheckCircle size={20} color={getStatusColor(detailModal.status)} />
+                    ) : detailModal.status === 'FAILED' || detailModal.status === 'CANCELLED' ? (
+                      <AlertCircle size={20} color={getStatusColor(detailModal.status)} />
+                    ) : (
+                      <Clock size={20} color={getStatusColor(detailModal.status)} />
+                    )}
+                    <Text style={[styles.statusBannerText, { color: getStatusColor(detailModal.status) }]}>
+                      {STATUS_LABELS[detailModal.status] || detailModal.status}
+                    </Text>
+                  </View>
+
+                  {/* Amount */}
+                  <View style={styles.detailAmountBox}>
+                    <Text style={styles.detailAmountLabel}>Số tiền yêu cầu rút</Text>
+                    <Text style={styles.detailAmountValue}>-{formatCurrency(detailModal.amount)}</Text>
+                    <Text style={styles.detailNetLabel}>
+                      Phí dịch vụ: {formatCurrency(detailModal.fee)} · Thực nhận: {formatCurrency(detailModal.amount - detailModal.fee)}
+                    </Text>
+                  </View>
+
+                  {/* Transaction Info */}
+                  <View style={styles.detailSection}>
+                    <Text style={styles.detailSectionTitle}>Thông tin giao dịch</Text>
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailRowLabel}>Ngày yêu cầu</Text>
+                      <Text style={styles.detailRowValue}>{formatDateTime(detailModal.requestedAt)}</Text>
+                    </View>
+                    {detailModal.processedAt && (
+                      <View style={styles.detailRow}>
+                        <Text style={styles.detailRowLabel}>Ngày xử lý</Text>
+                        <Text style={styles.detailRowValue}>{formatDateTime(detailModal.processedAt)}</Text>
+                      </View>
+                    )}
+                  </View>
+
+                  {/* Bank Info */}
+                  <View style={styles.detailSection}>
+                    <Text style={styles.detailSectionTitle}>Tài khoản nhận tiền</Text>
+                    {detailModal.bankAccountRaw?.bankName && (
+                      <View style={styles.detailRow}>
+                        <Text style={styles.detailRowLabel}>Ngân hàng</Text>
+                        <Text style={styles.detailRowValue}>{detailModal.bankAccountRaw.bankName}</Text>
+                      </View>
+                    )}
+                    {detailModal.bankAccountRaw?.accountName && (
+                      <View style={styles.detailRow}>
+                        <Text style={styles.detailRowLabel}>Chủ tài khoản</Text>
+                        <Text style={styles.detailRowValue}>{detailModal.bankAccountRaw.accountName}</Text>
+                      </View>
+                    )}
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailRowLabel}>Số tài khoản</Text>
+                      <Text style={styles.detailRowValue}>{detailModal.bankAccount}</Text>
+                    </View>
+                  </View>
+
+                  {/* Admin Note */}
+                  {detailModal.note && (
+                    <View style={styles.detailSection}>
+                      <Text style={styles.detailSectionTitle}>Ghi chú từ Admin</Text>
+                      <View style={styles.adminNoteBox}>
+                        <AlertCircle size={16} color={COLORS.warning} />
+                        <Text style={styles.adminNoteText}>{detailModal.note}</Text>
+                      </View>
+                    </View>
+                  )}
+
+                  {/* Transfer Proof Image */}
+                  {detailModal.transferProof ? (
+                    <View style={styles.detailSection}>
+                      <Text style={styles.detailSectionTitle}>Chứng từ chuyển khoản từ Admin</Text>
+                      <View style={styles.proofImageWrapper}>
+                        <Image
+                          source={{ uri: detailModal.transferProof }}
+                          style={styles.proofImageFull}
+                          resizeMode="contain"
+                        />
+                        <View style={styles.proofVerifiedBadge}>
+                          <CheckCircle size={14} color={COLORS.white} />
+                          <Text style={styles.proofVerifiedText}>Đã xác nhận bởi Admin</Text>
+                        </View>
+                      </View>
+                    </View>
+                  ) : detailModal.status === 'COMPLETED' ? (
+                    <View style={styles.detailSection}>
+                      <Text style={styles.detailSectionTitle}>Chứng từ chuyển khoản</Text>
+                      <View style={styles.noProofBox}>
+                        <AlertCircle size={20} color={COLORS.textLight} />
+                        <Text style={styles.noProofText}>Admin chưa đính kèm chứng từ</Text>
+                      </View>
+                    </View>
+                  ) : detailModal.status === 'PENDING' || detailModal.status === 'PROCESSING' ? (
+                    <View style={styles.detailSection}>
+                      <View style={styles.pendingProofBox}>
+                        <Clock size={20} color={COLORS.warning} />
+                        <Text style={styles.pendingProofText}>
+                          Yêu cầu đang được xử lý. Admin sẽ gửi chứng từ sau khi chuyển khoản.
+                        </Text>
+                      </View>
+                    </View>
+                  ) : null}
+                </>
+              )}
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -518,7 +640,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.md,
+    paddingBottom: SPACING.md,
     backgroundColor: COLORS.white,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
@@ -658,22 +780,63 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.xs,
     fontWeight: FONT_WEIGHTS.semibold,
   },
-  cancelButton: {
-    marginTop: SPACING.sm,
-    alignSelf: 'flex-start',
-  },
-  cancelButtonText: {
-    fontSize: FONT_SIZES.sm,
+  withdrawalAmountLarge: {
+    fontSize: FONT_SIZES.xl,
+    fontWeight: FONT_WEIGHTS.bold,
     color: COLORS.error,
+    marginVertical: SPACING.xs,
+  },
+  withdrawalBankInline: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textLight,
+    marginBottom: SPACING.xs,
+  },
+  proofIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: SPACING.xs,
+  },
+  proofIndicatorText: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.success,
     fontWeight: FONT_WEIGHTS.medium,
   },
-  viewProofButton: {
+  withdrawalActions: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
     marginTop: SPACING.sm,
-    alignSelf: 'flex-start',
   },
-  viewProofText: {
+  detailButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs,
+    backgroundColor: `${COLORS.primary}15`,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: `${COLORS.primary}30`,
+  },
+  detailButtonText: {
     fontSize: FONT_SIZES.sm,
     color: COLORS.primary,
+    fontWeight: FONT_WEIGHTS.medium,
+  },
+  cancelWithdrawButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs,
+    backgroundColor: `${COLORS.error}10`,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: `${COLORS.error}25`,
+  },
+  cancelWithdrawButtonText: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.error,
     fontWeight: FONT_WEIGHTS.medium,
   },
   transactionItem: {
@@ -814,31 +977,149 @@ const styles = StyleSheet.create({
     fontWeight: FONT_WEIGHTS.semibold,
     color: COLORS.white,
   },
-  proofModalContent: {
+  detailModalContent: {
     backgroundColor: COLORS.white,
-    margin: SPACING.lg,
-    borderRadius: 16,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     padding: SPACING.lg,
-    maxHeight: '80%',
+    maxHeight: '92%',
   },
-  proofImage: {
-    width: '100%',
-    height: 300,
-    borderRadius: 12,
-    marginBottom: SPACING.md,
-  },
-  noteBox: {
+  closeButton: {
+    padding: SPACING.xs,
     backgroundColor: COLORS.background,
+    borderRadius: 20,
+  },
+  statusBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
     padding: SPACING.md,
     borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: SPACING.md,
   },
-  noteLabel: {
+  statusBannerText: {
+    fontSize: FONT_SIZES.md,
+    fontWeight: FONT_WEIGHTS.semibold,
+  },
+  detailAmountBox: {
+    alignItems: 'center',
+    paddingVertical: SPACING.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    marginBottom: SPACING.md,
+  },
+  detailAmountLabel: {
     fontSize: FONT_SIZES.sm,
     color: COLORS.textLight,
     marginBottom: SPACING.xs,
   },
-  noteText: {
-    fontSize: FONT_SIZES.md,
+  detailAmountValue: {
+    fontSize: 32,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.error,
+    marginBottom: SPACING.xs,
+  },
+  detailNetLabel: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.textLight,
+    textAlign: 'center',
+  },
+  detailSection: {
+    marginBottom: SPACING.md,
+  },
+  detailSectionTitle: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.bold,
+    color: COLORS.textLight,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: SPACING.sm,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    paddingVertical: SPACING.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  detailRowLabel: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textLight,
+    flex: 1,
+  },
+  detailRowValue: {
+    fontSize: FONT_SIZES.sm,
     color: COLORS.text,
+    fontWeight: FONT_WEIGHTS.medium,
+    flex: 2,
+    textAlign: 'right',
+  },
+  adminNoteBox: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    backgroundColor: '#FFF8E7',
+    padding: SPACING.md,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#FFE082',
+  },
+  adminNoteText: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.text,
+    flex: 1,
+    lineHeight: 20,
+  },
+  proofImageWrapper: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: COLORS.background,
+  },
+  proofImageFull: {
+    width: '100%',
+    height: 280,
+  },
+  proofVerifiedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: COLORS.success,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    justifyContent: 'center',
+  },
+  proofVerifiedText: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.white,
+    fontWeight: FONT_WEIGHTS.semibold,
+  },
+  noProofBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    backgroundColor: COLORS.background,
+    padding: SPACING.md,
+    borderRadius: 12,
+  },
+  noProofText: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textLight,
+  },
+  pendingProofBox: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    backgroundColor: '#FFF8E7',
+    padding: SPACING.md,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#FFE082',
+    alignItems: 'flex-start',
+  },
+  pendingProofText: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.text,
+    flex: 1,
+    lineHeight: 20,
   },
 });

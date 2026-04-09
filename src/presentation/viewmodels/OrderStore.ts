@@ -116,12 +116,16 @@ export const useOrderStore = create<OrderState>((set, get) => ({
       const repo = container().orderRepository;
       const result = await repo.confirmDelivery(orderId);
       if (result.success) {
+        set({ error: null });
         // Refresh orders
         const { lastParams } = get();
         if (lastParams) get().getMyOrders(lastParams);
+      } else {
+        set({ error: result.message || 'Không thể xác nhận đã nhận hàng' });
       }
       return result.success;
-    } catch {
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : 'Không thể xác nhận đã nhận hàng' });
       return false;
     }
   },

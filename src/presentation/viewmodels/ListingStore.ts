@@ -3,6 +3,12 @@ import { Listing, ListingSearchParams, CreateListingData } from '../../domain/en
 import { useCase } from '../../di/Container';
 import { LoadingState, PaginatedResponse } from '../../domain/entities/Common';
 
+const byBoostPriority = (a: Listing, b: Listing): number => {
+  const boostDelta = (b.boostCount ?? 0) - (a.boostCount ?? 0);
+  if (boostDelta !== 0) return boostDelta;
+  return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+};
+
 interface ListingState {
   // State
   listings: Listing[];
@@ -63,13 +69,14 @@ export const useListingStore = create<ListingState>((set, get) => ({
       
       if (result.success) {
         const data = result.data ?? [];
+        const prioritizedData = [...data].sort(byBoostPriority);
         const currentPage = result.page ?? result.currentPage ?? 1;
         const totalPages = result.totalPages ?? 1;
         set({
-          listings: data,
+          listings: prioritizedData,
           currentPage,
           totalPages,
-          totalCount: result.count ?? data.length,
+          totalCount: result.count ?? prioritizedData.length,
           hasMore: currentPage < totalPages,
           loadingState: 'success',
           error: null
@@ -107,10 +114,11 @@ export const useListingStore = create<ListingState>((set, get) => ({
       
       if (result.success) {
         const data = result.data ?? [];
+        const prioritizedData = [...data].sort(byBoostPriority);
         const currentPage = result.page ?? result.currentPage ?? currentPageState;
         const totalPages = result.totalPages ?? get().totalPages;
         set(state => ({
-          listings: [...state.listings, ...data],
+          listings: [...state.listings, ...prioritizedData].sort(byBoostPriority),
           currentPage,
           totalPages,
           hasMore: currentPage < totalPages,
@@ -161,10 +169,12 @@ export const useListingStore = create<ListingState>((set, get) => ({
 
   getFeaturedListings: async (limit: number = 10): Promise<void> => {
     try {
-      const result = await useCase.listing().getFeaturedListings(limit);
+      const cappedLimit = Math.min(Math.max(limit, 5), 10);
+      const result = await useCase.listing().getFeaturedListings(cappedLimit);
       
       if (result.success && result.data) {
-        set({ featuredListings: result.data });
+        const prioritizedData = [...result.data].sort(byBoostPriority).slice(0, 10);
+        set({ featuredListings: prioritizedData });
       }
     } catch (error) {
       console.warn('Failed to load featured listings:', error);

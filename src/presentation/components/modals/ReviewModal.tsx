@@ -15,7 +15,7 @@ import {
 import { X, Star } from 'lucide-react-native';
 import { COLORS, SPACING, FONT_SIZES, FONT_WEIGHTS, SHADOWS } from '../../../config/theme';
 import Toast from 'react-native-toast-message';
-import { useReviewStore } from '../../viewmodels/ReviewStore';
+import { container } from '../../../di/Container';
 
 interface ReviewModalProps {
   visible: boolean;
@@ -51,7 +51,6 @@ const StarRating: React.FC<{
 );
 
 export const ReviewModal: React.FC<ReviewModalProps> = ({ visible, orderId, onClose, onSuccess }) => {
-  const createReview = useReviewStore(s => s.createReview);
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState('');
   const [categories, setCategories] = useState({
@@ -61,6 +60,7 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({ visible, orderId, onCl
     packaging: 5,
   });
   const [loading, setLoading] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const handleCategoryChange = (category: keyof typeof categories, value: number) => {
     setCategories(prev => ({ ...prev, [category]: value }));
@@ -72,26 +72,55 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({ visible, orderId, onCl
       return;
     }
 
+    setSubmitError(null);
     setLoading(true);
     try {
-      const ok = await createReview({
+      const orderResponse = await container().orderApiClient.getOrderById(orderId);
+      const latestStatus = String(orderResponse?.data?.status || '').toUpperCase();
+      if (!orderResponse?.success || !['COMPLETED', 'DELIVERED'].includes(latestStatus)) {
+        const msg = 'Đơn hàng chưa ở trạng thái hoàn tất để đánh giá';
+        setSubmitError(msg);
+        Toast.show({
+          type: 'error',
+          text1: 'Không thể gửi đánh giá',
+          text2: msg,
+        });
+        return;
+      }
+
+      const payload = {
         orderId,
         rating,
         comment: comment.trim(),
         categories,
-      });
+      };
+
+      const response = await container().reviewApiClient.createReview(payload);
+      const ok = response?.success !== false && !(response as any)?.error;
+
       if (ok) {
         Toast.show({ type: 'success', text1: 'Đánh giá đã được gửi' });
         onSuccess();
         onClose();
       } else {
-        const err = useReviewStore.getState().error;
-        Toast.show({ type: 'error', text1: err || 'Không thể gửi đánh giá' });
+        const err =
+          (response as any)?.message ||
+          (response as any)?.error ||
+          'Đơn hàng chưa hợp lệ để đánh giá hoặc bạn không phải người mua';
+        setSubmitError(err);
+        Toast.show({
+          type: 'error',
+          text1: 'Không thể gửi đánh giá',
+          text2: err,
+        });
       }
     } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Có lỗi khi gửi đánh giá';
+      setSubmitError(msg);
       Toast.show({
         type: 'error',
-        text1: e instanceof Error ? e.message : 'Có lỗi khi gửi đánh giá',
+        text1: 'Gửi đánh giá thất bại',
+        text2: msg,
       });
     } finally {
       setLoading(false);
@@ -109,7 +138,11 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({ visible, orderId, onCl
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+          <ScrollView
+            style={styles.content}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
             <View style={styles.overallRating}>
               <Text style={styles.label}>Đánh giá tổng quan</Text>
               <StarRating value={rating} onChange={setRating} size={32} />
@@ -162,6 +195,10 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({ visible, orderId, onCl
               numberOfLines={6}
               textAlignVertical="top"
             />
+
+            {!!submitError && (
+              <Text style={styles.errorText}>{submitError}</Text>
+            )}
           </ScrollView>
 
           <View style={styles.actions}>
@@ -253,6 +290,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: SPACING.sm,
+  },
+  errorText: {
+    marginTop: SPACING.sm,
+    color: COLORS.error,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.medium,
   },
   ratingRowLabel: {
     fontSize: FONT_SIZES.sm,

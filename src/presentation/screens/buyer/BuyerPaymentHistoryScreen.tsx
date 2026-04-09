@@ -49,7 +49,7 @@ export const BuyerPaymentHistoryScreen: React.FC<BuyerPaymentHistoryScreenProps>
   const [totalPages, setTotalPages] = useState(1);
   const [loadingMore, setLoadingMore] = useState(false);
 
-  const walletClient = container.get<WalletApiClient>('WalletApiClient');
+  const walletClient = container().walletApiClient;
 
   const fetchTransactions = useCallback(
     async (page: number, append: boolean = false) => {

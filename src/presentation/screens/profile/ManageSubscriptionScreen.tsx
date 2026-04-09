@@ -273,6 +273,7 @@ export const ManageSubscriptionScreen: React.FC<ManageSubscriptionScreenProps> =
 
   const daysRemaining = getDaysRemaining();
   const isFree = subscription.subscription.planType === 'FREE';
+  const isPremium = subscription.subscription.planType === 'PREMIUM';
   const planColor = getPlanColor(subscription.subscription.planType);
 
   return (
@@ -404,14 +405,14 @@ export const ManageSubscriptionScreen: React.FC<ManageSubscriptionScreenProps> =
         </View>
 
         {/* Upgrade section */}
-        {isFree && (
+        {!isPremium && (
           <View style={styles.upgradeSection}>
             <View style={styles.upgradeIconWrap}>
               <TrendingUp size={32} color={COLORS.accent} />
             </View>
-            <Text style={styles.upgradeTitle}>Nâng cấp lên Premium</Text>
+            <Text style={styles.upgradeTitle}>Nâng cấp gói</Text>
             <Text style={styles.upgradeSubtitle}>
-              Tăng giới hạn tin đăng, giảm hoa hồng và nhiều tính năng khác
+              Tăng giới hạn tin đăng, giảm hoa hồng và mở thêm lượt Boost
             </Text>
             <TouchableOpacity
               style={styles.upgradeBtn}

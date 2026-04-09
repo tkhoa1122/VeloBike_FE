@@ -77,7 +77,23 @@ export class ListingApiClient extends BaseApiClient {
   /**
    * Boost listing (premium feature)
    */
-  async boostListing(params: BoostListingParams): Promise<{ success: boolean; message: string }> {
+  async boostListing(params: BoostListingParams): Promise<{
+    success: boolean;
+    message: string;
+    data?: {
+      listing?: {
+        _id: string;
+        title?: string;
+        boostedUntil?: string;
+        boostCount?: number;
+      };
+      boostUsage?: {
+        used: number;
+        limit: number;
+        remaining: number;
+      };
+    };
+  }> {
     return this.post(ENDPOINTS.LISTINGS.BOOST(params.listingId), {
       days: params.days
     });

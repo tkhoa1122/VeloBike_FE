@@ -24,6 +24,7 @@ import {
   XCircle,
   Clock,
   ChevronRight,
+  Star,
 } from 'lucide-react-native';
 import {
   COLORS,
@@ -49,6 +50,7 @@ const STATUS_TABS = [
   { key: 'SHIPPING', label: 'Đang giao' },
   { key: 'DELIVERED', label: 'Đã giao' },
   { key: 'COMPLETED', label: 'Hoàn thành' },
+  { key: 'DISPUTED', label: 'Tranh chấp' },
   { key: 'CANCELLED', label: 'Đã hủy' },
 ];
 
@@ -108,10 +110,18 @@ export const OrdersScreen: React.FC<OrdersScreenProps> = ({ onBack, onOrderPress
   const { orders, loadingState, getMyOrders } = useOrderStore();
   const hasAutoChecked = useRef(false);
 
+  const loadBuyerOrders = useCallback(() => {
+    getMyOrders({
+      page: 1,
+      limit: 20,
+      filters: { role: 'buyer' as any },
+    } as any);
+  }, [getMyOrders]);
+
   useEffect(() => {
     Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
-    getMyOrders({ page: 1, limit: 20 });
-  }, [fadeAnim, getMyOrders]);
+    loadBuyerOrders();
+  }, [fadeAnim, loadBuyerOrders]);
 
   // Auto-check payment for recent CREATED orders (like WEB)
   useEffect(() => {
@@ -143,7 +153,7 @@ export const OrdersScreen: React.FC<OrdersScreenProps> = ({ onBack, onOrderPress
 
       // If already paid, refresh list
       if (order.status !== 'CREATED') {
-        getMyOrders({ page: 1, limit: 20 });
+        loadBuyerOrders();
         return;
       }
 
@@ -178,7 +188,7 @@ export const OrdersScreen: React.FC<OrdersScreenProps> = ({ onBack, onOrderPress
 
         if (webhookRes.ok) {
           // Refresh orders list
-          getMyOrders({ page: 1, limit: 20 });
+          loadBuyerOrders();
         }
       }
     } catch (error) {
@@ -218,10 +228,33 @@ export const OrdersScreen: React.FC<OrdersScreenProps> = ({ onBack, onOrderPress
           </View>
           <ChevronRight size={18} color={COLORS.textLight} />
         </View>
-        {item.trackingInfo?.trackingNumber && (
+        {item.status === 'SHIPPING' && item.trackingInfo?.trackingNumber && (
           <View style={styles.trackingBar}>
             <Truck size={14} color={COLORS.primary} />
             <Text style={styles.trackingText}>Đang vận chuyển</Text>
+          </View>
+        )}
+
+        {item.status === 'DISPUTED' && (
+          <View style={styles.cardActions}>
+            <View style={styles.disputedBadge}>
+              <Text style={styles.disputedBadgeText}>⚠️ Đang tranh chấp — Chờ xử lý</Text>
+            </View>
+          </View>
+        )}
+
+        {(item.status === 'COMPLETED' || item.status === 'DELIVERED') && (
+          <View style={styles.cardActions}>
+            <TouchableOpacity
+              style={styles.reviewButton}
+              onPress={() => {
+                const serializedOrder = JSON.parse(JSON.stringify(item));
+                onOrderPress?.(item._id, serializedOrder);
+              }}
+            >
+              <Star size={14} color={COLORS.primary} />
+              <Text style={styles.reviewButtonText}>Đánh giá</Text>
+            </TouchableOpacity>
           </View>
         )}
       </TouchableOpacity>
@@ -308,6 +341,42 @@ const styles = StyleSheet.create({
   orderPrice: { fontSize: FONT_SIZES.base, fontWeight: FONT_WEIGHTS.bold, color: COLORS.accent, marginTop: 4 },
   trackingBar: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, backgroundColor: COLORS.primarySurface, paddingHorizontal: SPACING.base, paddingVertical: SPACING.sm },
   trackingText: { fontSize: FONT_SIZES.sm, fontWeight: FONT_WEIGHTS.medium, color: COLORS.primaryDark },
+  cardActions: {
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    padding: SPACING.base,
+  },
+  disputedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF2F2',
+    borderRadius: RADIUS.md,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    alignSelf: 'flex-start',
+  },
+  disputedBadgeText: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.semibold,
+    color: COLORS.error,
+  },
+  reviewButton: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.white,
+  },
+  reviewButtonText: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: FONT_WEIGHTS.semibold,
+    color: COLORS.primary,
+  },
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: SPACING.md },
   emptyTitle: { fontSize: FONT_SIZES.xl, fontWeight: FONT_WEIGHTS.semibold, color: COLORS.text },
   emptySub: { fontSize: FONT_SIZES.md, color: COLORS.textLight },

@@ -224,6 +224,14 @@ export class DIContainer {
     return this._orderApiClient;
   }
 
+  get reviewApiClient(): ReviewApiClient {
+    return this._reviewApiClient;
+  }
+
+  get uploadApiClient(): UploadApiClient {
+    return this._uploadApiClient;
+  }
+
   // Repository interfaces (for direct use if needed)
   get authRepository(): AuthRepository {
     return this._authRepository;

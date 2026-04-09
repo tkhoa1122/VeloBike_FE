@@ -12,14 +12,13 @@ import {
   Animated,
   StatusBar,
   ActivityIndicator,
-  SafeAreaView,
   Modal,
   TextInput,
   FlatList,
   Alert,
 } from 'react-native';
 import tw from 'twrnc';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   ChevronLeft,
   Search,
@@ -35,6 +34,7 @@ import {
 import Toast from 'react-native-toast-message';
 import { COLORS } from '../../../config/theme';
 import { container } from '../../../di/Container';
+import { useAuthStore } from '../../viewmodels/AuthStore';
 
 type OrderStatus =
   | 'ESCROW_LOCKED'
@@ -142,6 +142,10 @@ export const SellerOrdersScreen: React.FC<SellerOrdersScreenProps> = ({
   onViewOrderDetail,
   onMessage,
 }) => {
+  const { user } = useAuthStore();
+  const normalizedRole = String(user?.role || '').toUpperCase();
+  const isSellerRole = normalizedRole === 'SELLER';
+  const isBuyerRole = normalizedRole === 'BUYER';
   const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -152,7 +156,11 @@ export const SellerOrdersScreen: React.FC<SellerOrdersScreenProps> = ({
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [showInspectionModal, setShowInspectionModal] = useState(false);
+  const [showShippingModal, setShowShippingModal] = useState(false);
   const [inspectionFeedback, setInspectionFeedback] = useState('');
+  
+  // Shipping form states
+  const [carrier, setCarrier] = useState('GIAO_HANG_NHANH');
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   const statusLabels: Record<OrderStatus, string> = {
@@ -238,7 +246,7 @@ export const SellerOrdersScreen: React.FC<SellerOrdersScreenProps> = ({
         page: 1,
         limit: 100,
         sort: { field: 'createdAt', order: 'desc' },
-        filters: { role: 'seller' },
+        filters: { role: isSellerRole ? 'seller' : 'buyer' },
       });
 
       if (!res.success || !Array.isArray(res.data)) {
@@ -372,6 +380,100 @@ export const SellerOrdersScreen: React.FC<SellerOrdersScreenProps> = ({
     );
   };
 
+  const handleStartShipping = async (order: Order) => {
+    setSelectedOrder(order);
+    setCarrier('GIAO_HANG_NHANH');
+    setShowShippingModal(true);
+  };
+
+  const handleConfirmShipping = async () => {
+    if (!selectedOrder) return;
+    
+    console.log('[SellerOrders] handleConfirmShipping - Start', { orderId: selectedOrder._id, carrier });
+    
+    if (!carrier) {
+      Toast.show({
+        type: 'error',
+        text1: 'Thiếu thông tin',
+        text2: 'Vui lòng chọn đơn vị vận chuyển',
+      });
+      return;
+    }
+
+    try {
+      const token = await container().authApiClient.getStoredAccessToken();
+      if (!token) {
+        Toast.show({ type: 'error', text1: 'Phiên đăng nhập hết hạn' });
+        return;
+      }
+
+      // Map carrier to serviceId for BE
+      const serviceIdMap: Record<string, string> = {
+        GIAO_HANG_NHANH: 'GHN_STD',
+        VIETTEL_POST: 'VTP_FAST',
+        VNPOST: 'GHN_STD',
+        SELF_PICKUP: 'GHN_STD',
+      };
+      const serviceId = serviceIdMap[carrier] || 'GHN_STD';
+
+      const apiUrl = `${container().authApiClient['baseURL']}/logistics/create-shipment`;
+      console.log('[SellerOrders] Calling API:', apiUrl);
+      console.log('[SellerOrders] Request body:', { orderId: selectedOrder._id, serviceId });
+
+      // Call logistics API to create shipment (BE auto-generates tracking number)
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          orderId: selectedOrder._id,
+          serviceId,
+        }),
+      });
+
+      const data = await response.json();
+      console.log('[SellerOrders] API Response:', { status: response.status, data });
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || 'Không thể tạo vận đơn');
+      }
+
+      // Update local state with shipment data from BE
+      setOrders((prev) =>
+        prev.map((o) =>
+          o._id === selectedOrder._id
+            ? {
+                ...o,
+                status: 'SHIPPING',
+                shipping: {
+                  trackingNumber: data.data.trackingNumber,
+                  carrier: data.data.carrier,
+                },
+              }
+            : o
+        )
+      );
+
+      setShowShippingModal(false);
+      Toast.show({
+        type: 'success',
+        text1: 'Đã bắt đầu giao hàng',
+        text2: `Mã vận đơn: ${data.data.trackingNumber}`,
+        visibilityTime: 4000,
+      });
+      console.log('[SellerOrders] Success! Tracking:', data.data.trackingNumber);
+    } catch (error: any) {
+      console.error('[SellerOrders] Error creating shipment:', error);
+      Toast.show({
+        type: 'error',
+        text1: 'Lỗi tạo vận đơn',
+        text2: error?.message || 'Không thể bắt đầu giao hàng. Vui lòng thử lại.',
+      });
+    }
+  };
+
   const renderOrderItem = ({ item }: { item: Order }) => (
     <TouchableOpacity
       style={tw`bg-white rounded-xl mb-3 overflow-hidden shadow-sm`}
@@ -425,32 +527,16 @@ export const SellerOrdersScreen: React.FC<SellerOrdersScreenProps> = ({
 
       {/* Actions */}
       <View style={tw`flex-row items-center gap-2 px-3 py-2 bg-gray-50 border-t border-gray-100`}>
-        {item.status === 'ESCROW_LOCKED' && (
+        {item.status === 'INSPECTION_PASSED' && (
           <TouchableOpacity
             style={tw`flex-1 flex-row items-center justify-center gap-1 bg-green-50 rounded-lg py-2`}
-            onPress={() => {
-              setSelectedOrder(item);
-              setShowInspectionModal(true);
-            }}
+            onPress={() => handleStartShipping(item)}
           >
-            <Package size={14} color={COLORS.primary} />
-            <Text style={tw`text-xs font-bold text-green-600`}>Kiểm hàng</Text>
+            <Truck size={14} color="#16A34A" />
+            <Text style={tw`text-xs font-bold text-green-600`}>Bắt đầu giao hàng</Text>
           </TouchableOpacity>
         )}
-
-        {item.status === 'IN_INSPECTION' && (
-          <TouchableOpacity
-            style={tw`flex-1 flex-row items-center justify-center gap-1 bg-green-50 rounded-lg py-2`}
-            onPress={() => {
-              setSelectedOrder(item);
-              setShowInspectionModal(true);
-            }}
-          >
-            <CheckCircle size={14} color="#10B981" />
-            <Text style={tw`text-xs font-bold text-green-600`}>Kết quả kiểm</Text>
-          </TouchableOpacity>
-        )}
-
+        
         <TouchableOpacity
           style={tw`flex-1 flex-row items-center justify-center gap-1 bg-purple-50 rounded-lg py-2`}
           onPress={() =>
@@ -463,7 +549,14 @@ export const SellerOrdersScreen: React.FC<SellerOrdersScreenProps> = ({
 
         <TouchableOpacity
           style={tw`flex-1 flex-row items-center justify-center gap-1 bg-gray-100 rounded-lg py-2`}
-          onPress={() => onViewOrderDetail?.(item)}
+          onPress={() => {
+            if (onViewOrderDetail) {
+              onViewOrderDetail(item);
+            } else {
+              setSelectedOrder(item);
+              setShowDetailModal(true);
+            }
+          }}
         >
           <Eye size={14} color={COLORS.textLight} />
           <Text style={tw`text-xs font-bold text-gray-600`}>Chi tiết</Text>
@@ -537,8 +630,9 @@ export const SellerOrdersScreen: React.FC<SellerOrdersScreenProps> = ({
               onPress={() => setActiveFilter(status)}
             >
               <Text
+                numberOfLines={1}
                 style={[
-                  tw`text-sm font-bold whitespace-nowrap`,
+                  tw`text-sm font-bold`,
                   activeFilter === status ? tw`text-white` : tw`text-gray-700`,
                 ]}
               >
@@ -787,6 +881,111 @@ export const SellerOrdersScreen: React.FC<SellerOrdersScreenProps> = ({
                 </TouchableOpacity>
               </View>
             </ScrollView>
+          </SafeAreaView>
+        </Modal>
+      )}
+
+      {/* Shipping Modal */}
+      {selectedOrder && (
+        <Modal
+          visible={showShippingModal}
+          animationType="slide"
+          transparent
+          onRequestClose={() => setShowShippingModal(false)}
+        >
+          <SafeAreaView style={tw`flex-1 bg-gray-50`}>
+            <StatusBar barStyle="dark-content" backgroundColor={COLORS.white} />
+
+            {/* Modal Header */}
+            <View style={tw`bg-white px-4 py-3 flex-row items-center justify-between border-b border-gray-100`}>
+              <Text style={tw`text-lg font-bold text-gray-900`}>Thông tin giao hàng</Text>
+              <TouchableOpacity onPress={() => setShowShippingModal(false)}>
+                <X size={24} color={COLORS.text} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView contentContainerStyle={tw`px-4 py-4 pb-6 flex-1`}>
+              {/* Order Summary */}
+              <View style={tw`bg-white rounded-xl p-4 mb-4`}>
+                <Text style={tw`text-sm font-bold text-gray-900 mb-2`}>{selectedOrder.orderCode}</Text>
+                <Text style={tw`text-xs text-gray-500 mb-3`}>{selectedOrder.itemId.title}</Text>
+                <View style={tw`pt-3 border-t border-gray-100`}>
+                  <Text style={tw`text-xs text-gray-600 mb-1`}>Người mua:</Text>
+                  <Text style={tw`text-sm font-semibold text-gray-900`}>{selectedOrder.buyerId.fullName}</Text>
+                  {selectedOrder.buyerId.phone && (
+                    <Text style={tw`text-xs text-gray-600 mt-1`}>📞 {selectedOrder.buyerId.phone}</Text>
+                  )}
+                </View>
+              </View>
+
+              {/* Shipping Form */}
+              <View style={tw`bg-white rounded-xl p-4 mb-4`}>
+                <Text style={tw`text-sm font-bold text-gray-900 mb-4`}>Chọn đơn vị vận chuyển</Text>
+
+                {/* Carrier Selection */}
+                <View style={tw`flex-row flex-wrap gap-2`}>
+                  {[
+                    { value: 'GIAO_HANG_NHANH', label: 'Giao Hàng Nhanh', icon: '📦' },
+                    { value: 'VIETTEL_POST', label: 'Viettel Post', icon: '📮' },
+                    { value: 'VNPOST', label: 'VNPost', icon: '✉️' },
+                    { value: 'SELF_PICKUP', label: 'Tự giao hàng', icon: '🚚' },
+                  ].map((option) => (
+                    <TouchableOpacity
+                      key={option.value}
+                      onPress={() => setCarrier(option.value)}
+                      style={[
+                        tw`flex-1 min-w-[45%] px-4 py-3 rounded-lg border items-center`,
+                        carrier === option.value
+                          ? tw`bg-green-50 border-green-600`
+                          : tw`bg-white border-gray-200`,
+                      ]}
+                    >
+                      <Text style={tw`text-2xl mb-1`}>{option.icon}</Text>
+                      <Text
+                        style={[
+                          tw`text-sm font-semibold text-center`,
+                          carrier === option.value ? tw`text-green-600` : tw`text-gray-600`,
+                        ]}
+                      >
+                        {option.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              {/* Info Notice */}
+              <View style={tw`bg-blue-50 rounded-xl p-3 flex-row gap-2`}>
+                <AlertCircle size={16} color="#2563EB" style={tw`mt-0.5`} />
+                <View style={tw`flex-1`}>
+                  <Text style={tw`text-xs text-blue-900 leading-5 mb-2`}>
+                    Sau khi xác nhận, hệ thống sẽ tự động:
+                  </Text>
+                  <Text style={tw`text-xs text-blue-900 leading-5`}>
+                    • Tạo mã vận đơn (tracking number){'\n'}
+                    • Chuyển đơn hàng sang trạng thái "Đang giao hàng"{'\n'}
+                    • Thông báo cho người mua
+                  </Text>
+                </View>
+              </View>
+            </ScrollView>
+
+            {/* Action Buttons */}
+            <View style={tw`bg-white px-4 py-3 border-t border-gray-100 flex-row gap-3`}>
+              <TouchableOpacity
+                style={tw`flex-1 bg-gray-100 rounded-lg py-3`}
+                onPress={() => setShowShippingModal(false)}
+              >
+                <Text style={tw`text-center text-gray-700 font-bold`}>Hủy</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={tw`flex-1 bg-green-600 rounded-lg py-3`}
+                onPress={handleConfirmShipping}
+              >
+                <Text style={tw`text-center text-white font-bold`}>Xác nhận giao hàng</Text>
+              </TouchableOpacity>
+            </View>
           </SafeAreaView>
         </Modal>
       )}

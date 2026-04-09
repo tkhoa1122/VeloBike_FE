@@ -5,7 +5,7 @@
  * Flow:
  * 1. If first launch → WelcomeScreen
  * 2. If not authenticated → AuthStack (Login/Register/VerifyEmail)
- * 3. If authenticated → MainTabs (Home/Search/Wishlist/Messages/Profile)
+ * 3. If authenticated → MainTabs (Home/Search/Wishlist/Messages/AI/Profile)
  */
 import React, { useEffect, useState, useCallback } from 'react';
 import { ActivityIndicator, View, StyleSheet } from 'react-native';

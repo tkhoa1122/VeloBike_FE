@@ -14,6 +14,7 @@ import { COLORS } from './src/config/theme';
 // Suppress known harmless warnings
 LogBox.ignoreLogs([
   'Non-serializable values were found in the navigation state',
+  'SafeAreaView has been deprecated and will be removed in a future release',
 ]);
 
 function App(): React.JSX.Element {

@@ -56,6 +56,14 @@ export interface OrderModel {
     pickupAddress?: string;
     pickupTime?: string;
   };
+
+  /** Backend compatibility: some responses return shippingInfo instead of shippingMethod/trackingInfo */
+  shippingInfo?: {
+    carrier?: string;
+    trackingNumber?: string;
+    trackingUrl?: string;
+    shippedAt?: string;
+  };
   
   trackingInfo?: {
     trackingNumber: string;

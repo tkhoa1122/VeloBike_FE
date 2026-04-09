@@ -204,6 +204,31 @@ export class OrderRepositoryImpl implements OrderRepository {
   // =========================================================================
 
   private mapOrderModelToEntity(model: OrderModel): Order {
+    const fallbackShippingMethod: ShippingMethod = {
+      provider: (model.shippingInfo?.carrier as any) || 'SELF_PICKUP',
+      service: model.shippingInfo?.carrier ? 'Standard' : 'N/A',
+      estimatedDays: 0,
+      cost: model.financials?.shippingFee ?? 0,
+    };
+
+    const fallbackTrackingInfo = model.shippingInfo?.trackingNumber
+      ? {
+          trackingNumber: model.shippingInfo.trackingNumber,
+          carrierTrackingUrl: model.shippingInfo.trackingUrl,
+          status: 'IN_TRANSIT' as any,
+          events: model.shippingInfo?.shippedAt
+            ? [
+                {
+                  timestamp: new Date(model.shippingInfo.shippedAt),
+                  status: 'SHIPPING',
+                  description: 'Item shipped',
+                  location: model.shippingInfo.carrier,
+                },
+              ]
+            : [],
+        }
+      : undefined;
+
     return {
       _id: model._id,
       listingId: model.listingId as any,
@@ -213,7 +238,7 @@ export class OrderRepositoryImpl implements OrderRepository {
       status: model.status as any,
       financials: model.financials as OrderFinancials,
       shippingAddress: model.shippingAddress as ShippingAddress,
-      shippingMethod: model.shippingMethod as ShippingMethod,
+      shippingMethod: (model.shippingMethod as ShippingMethod) || fallbackShippingMethod,
       trackingInfo: model.trackingInfo
         ? {
             ...model.trackingInfo,
@@ -229,7 +254,7 @@ export class OrderRepositoryImpl implements OrderRepository {
                 }
               : undefined,
           }
-        : undefined,
+        : fallbackTrackingInfo,
       timeline: model.timeline.map(e => ({
         ...e,
         status: e.status as any,

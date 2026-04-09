@@ -1,6 +1,11 @@
 import { MessageApiClient, ConversationResponseModel, MessageResponseModel } from '../apis/MessageApiClient';
 import { ApiResponse, PaginatedResponse } from '../../domain/entities/Common';
-import { ChatbotConversation, ChatbotMessage, SendChatbotMessageData } from '../../domain/entities/Message';
+import {
+  ChatbotConversation,
+  ChatbotMessage,
+  SendChatbotMessageData,
+  ChatbotListingItem,
+} from '../../domain/entities/Message';
 
 // Presentation-friendly models
 export interface ConversationEntry {
@@ -142,20 +147,27 @@ export class MessageRepositoryImpl {
     }
   }
 
-  async sendChatbotMessage(data: SendChatbotMessageData): Promise<ApiResponse<{ reply: string }>> {
+  async sendChatbotMessage(
+    data: SendChatbotMessageData,
+  ): Promise<ApiResponse<{ reply: string; listings?: ChatbotListingItem[] }>> {
     try {
       const response = await this.messageApiClient.sendChatbotMessage(data);
       const reply = response.reply || response.data?.reply;
+      const listings = Array.isArray(response.listings) ? response.listings : undefined;
 
       if (response.success && reply) {
         return {
           success: true,
-          data: { reply },
+          data: { reply, listings },
           message: 'Chatbot replied',
         };
       }
 
-      return { success: false, message: 'Chatbot không phản hồi' };
+      const errMsg =
+        typeof (response as { message?: string }).message === 'string'
+          ? String((response as { message?: string }).message)
+          : 'Chatbot không phản hồi';
+      return { success: false, message: errMsg };
     } catch (error) {
       return {
         success: false,
@@ -187,6 +199,23 @@ export class MessageRepositoryImpl {
         currentPage: page,
         totalPages: 0,
         count: 0,
+      };
+    }
+  }
+
+  async getChatbotQuota(): Promise<
+    ApiResponse<{ remaining: number; unlimited: boolean; message?: string }>
+  > {
+    try {
+      const response = await this.messageApiClient.getChatbotQuota();
+      if (response.success && response.data) {
+        return { success: true, data: response.data };
+      }
+      return { success: false, message: response.message || 'Không thể tải hạn mức' };
+    } catch (error) {
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : 'Không thể tải hạn mức',
       };
     }
   }
@@ -334,10 +363,14 @@ export class MessageRepositoryImpl {
   }
 
   private mapChatbotMessage(model: any): ChatbotMessage {
+    /** BE VeloBike: ChatbotConversation.messages dùng sender: USER|BOT, text — không có role/content */
+    const rawSender = String(model?.sender ?? model?.role ?? '').toUpperCase();
+    const role: ChatbotMessage['role'] = rawSender === 'USER' ? 'USER' : 'ASSISTANT';
+    const content = String(model?.text ?? model?.content ?? model?.message ?? '');
     return {
-      id: String(model?._id || model?.id || Date.now()),
-      role: model?.role === 'USER' ? 'USER' : 'ASSISTANT',
-      content: String(model?.content || ''),
+      id: String(model?._id || model?.id || `${Date.now()}-${Math.random()}`),
+      role,
+      content,
       timestamp: model?.timestamp ? new Date(model.timestamp) : new Date(),
       confidence: typeof model?.confidence === 'number' ? model.confidence : undefined,
       suggestedActions: Array.isArray(model?.suggestedActions) ? model.suggestedActions : undefined,

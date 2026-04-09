@@ -56,7 +56,7 @@ export class OrderApiClient extends BaseApiClient {
    */
   async confirmDelivery(orderId: string): Promise<{ success: boolean; message: string }> {
     return this.put(ENDPOINTS.ORDERS.UPDATE_STATUS(orderId), {
-      status: 'COMPLETED',
+      status: 'DELIVERED',
       note: 'Buyer confirmed delivery',
     });
   }
@@ -173,6 +173,33 @@ export class OrderApiClient extends BaseApiClient {
    */
   async updateShippingAddress(orderId: string, shippingAddress: Record<string, any>): Promise<{ success: boolean; message?: string; data?: any }> {
     return this.put(ENDPOINTS.ORDERS.UPDATE_SHIPPING_ADDRESS(orderId), shippingAddress);
+  }
+
+  /**
+   * Calculate shipping estimate (same flow as Web FE)
+   */
+  async getShippingEstimate(
+    listingId: string,
+    buyerCity: string,
+    buyerProvince: string = ''
+  ): Promise<{
+    success: boolean;
+    data?: {
+      distanceKm: number;
+      baseFee: number;
+      weightFee: number;
+      bulkySurcharge: number;
+      total: number;
+      weightKg: number;
+      note?: string;
+    };
+    message?: string;
+  }> {
+    return this.get(ENDPOINTS.ORDERS.SHIPPING_ESTIMATE, {
+      listingId,
+      buyerCity,
+      buyerProvince,
+    });
   }
 
   /**

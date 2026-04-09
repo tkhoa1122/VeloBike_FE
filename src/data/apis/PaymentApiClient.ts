@@ -4,8 +4,14 @@ import { ENDPOINTS } from '../../config/api';
 // Response models
 export interface PaymentLinkResponseModel {
   success: boolean;
-  paymentLink: string;
-  orderCode: number;
+  paymentLink?: string;
+  checkoutUrl?: string;
+  orderCode?: number;
+  data?: {
+    paymentLink?: string;
+    checkoutUrl?: string;
+    orderCode?: number;
+  };
   message?: string;
 }
 

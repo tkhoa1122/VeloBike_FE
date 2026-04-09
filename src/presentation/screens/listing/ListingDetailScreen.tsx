@@ -15,6 +15,7 @@ import {
   Dimensions,
   FlatList,
   Share,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -54,8 +55,15 @@ import {
 import { useListingStore } from '../../viewmodels/ListingStore';
 import { useWishlistStore } from '../../viewmodels/WishlistStore';
 import { useAuthStore } from '../../viewmodels/AuthStore';
+import { container } from '../../../di/Container';
 import type { Listing } from '../../../domain/entities/Listing';
 import type { User } from '../../../domain/entities/User';
+import { checkProfileCompleteness } from '../../../utils/profileValidation';
+
+type ListingSellerExtra = User & {
+  badge?: string;
+  planType?: string;
+};
 
 export interface ListingChatNavigatePayload {
   sellerId: string;
@@ -75,6 +83,7 @@ interface ListingDetailScreenProps {
   onChat?: (payload: ListingChatNavigatePayload) => void;
   onBuy?: (listingId: string) => void;
   onSellerProfile?: (sellerId: string) => void;
+  onEditProfile?: () => void;
 }
 
 export const ListingDetailScreen: React.FC<ListingDetailScreenProps> = ({
@@ -83,6 +92,7 @@ export const ListingDetailScreen: React.FC<ListingDetailScreenProps> = ({
   onChat,
   onBuy,
   onSellerProfile,
+  onEditProfile,
 }) => {
   const insets = useSafeAreaInsets();
   const { currentListing, getListingById, loadingState } = useListingStore();
@@ -106,13 +116,43 @@ export const ListingDetailScreen: React.FC<ListingDetailScreenProps> = ({
       : '';
   const sellerProfile =
     listing && rawSeller != null && typeof rawSeller === 'object'
-      ? (rawSeller as User)
+      ? (rawSeller as ListingSellerExtra)
       : null;
   const isOwnListing = !!(
     user?._id &&
     sellerIdResolved &&
     user._id === sellerIdResolved
   );
+  
+  // State for fetched seller info when not populated
+  const [fetchedSeller, setFetchedSeller] = useState<User | null>(null);
+  
+  // Fetch seller info from users/{id} to get full data including avatar
+  useEffect(() => {
+    // Reset fetched seller when listing changes
+    setFetchedSeller(null);
+    
+    // Always fetch full seller info: listing API often returns seller without avatar
+    if (sellerIdResolved && (!sellerProfile || !sellerProfile.avatar)) {
+      const fetchSellerInfo = async () => {
+        try {
+          const response = await container().authApiClient.getUserById(sellerIdResolved);
+          if (response.success && response.data) {
+            setFetchedSeller(response.data);
+          }
+        } catch (error) {
+          console.error('[ListingDetail] Failed to fetch seller info:', error);
+        }
+      };
+      fetchSellerInfo();
+    }
+  }, [sellerProfile, sellerIdResolved, listing?._id]);
+  
+  // Resolve seller data (priority: fetched full profile > populated partial > own user fallback)
+  // fetchedSeller from users/{id} always has complete data including avatar
+  const resolvedSellerProfile = fetchedSeller || sellerProfile || (isOwnListing ? user : null);
+  const sellerAvatarResolved = resolvedSellerProfile?.avatar;
+  const sellerBadge = resolvedSellerProfile?.badge || (resolvedSellerProfile as any)?.planType === 'PREMIUM' ? 'Premium Seller' : undefined;
 
   // Fetch listing data on mount
   useEffect(() => {
@@ -152,6 +192,34 @@ export const ListingDetailScreen: React.FC<ListingDetailScreenProps> = ({
       // ignore
     }
   }, [listing]);
+
+  const handleBuyClick = useCallback(() => {
+    // Check profile completeness before allowing purchase
+    const profileCheck = checkProfileCompleteness(user);
+    if (!profileCheck.isComplete) {
+      Alert.alert(
+        'Hồ sơ chưa đầy đủ',
+        profileCheck.message || 'Vui lòng cập nhật đầy đủ thông tin hồ sơ trước khi mua hàng.',
+        [
+          { text: 'Hủy', style: 'cancel' },
+          {
+            text: 'Cập nhật hồ sơ',
+            onPress: () => {
+              if (onEditProfile) {
+                onEditProfile();
+              } else {
+                Alert.alert('Thông báo', 'Vui lòng vào Profile > Chỉnh sửa hồ sơ để cập nhật thông tin.');
+              }
+            },
+          },
+        ],
+      );
+      return;
+    }
+    
+    // Proceed with purchase
+    onBuy?.(listing._id!);
+  }, [listing, user, onBuy, onEditProfile]);
 
   const headerOpacity = scrollY.interpolate({
     inputRange: [0, IMAGE_H - 100],
@@ -427,29 +495,42 @@ export const ListingDetailScreen: React.FC<ListingDetailScreenProps> = ({
               activeOpacity={0.8}
               onPress={() => onSellerProfile?.(sellerIdResolved)}
             >
-              {sellerProfile?.avatar ? (
+              {sellerAvatarResolved ? (
                 <Image
-                  source={{ uri: sellerProfile.avatar }}
+                  source={{ uri: sellerAvatarResolved }}
                   style={styles.sellerAvatar}
                 />
               ) : (
-                <View style={styles.sellerAvatar} />
+                <View style={[styles.sellerAvatar, styles.sellerAvatarPlaceholder]}>
+                  <Text style={styles.sellerAvatarInitial}>
+                    {(resolvedSellerProfile?.fullName ?? 'N')[0].toUpperCase()}
+                  </Text>
+                </View>
               )}
               <View style={styles.sellerInfo}>
                 <Text style={styles.sellerName}>
-                  {sellerProfile?.fullName ?? 'Người bán'}
+                  {resolvedSellerProfile?.fullName ?? 'Người bán'}
                 </Text>
                 <View style={styles.sellerMeta}>
                   <Star size={12} color={COLORS.star} fill={COLORS.star} />
                   <Text style={styles.sellerRating}>
-                    {sellerProfile?.reputation?.score != null
-                      ? String(sellerProfile.reputation.score)
+                    {resolvedSellerProfile?.reputation?.score != null
+                      ? String(resolvedSellerProfile.reputation.score)
                       : '—'}
                   </Text>
                   <Text style={styles.sellerReviews}>
-                    ({sellerProfile?.reputation?.reviewCount ?? 0} đánh giá)
+                    ({resolvedSellerProfile?.reputation?.reviewCount ?? 0} đánh giá)
                   </Text>
                 </View>
+                {!!sellerBadge && (
+                  <View style={styles.sellerTagsRow}>
+                    {!!sellerBadge && (
+                      <View style={styles.sellerBadgeTag}>
+                        <Text style={styles.sellerBadgeTagText}>{sellerBadge}</Text>
+                      </View>
+                    )}
+                  </View>
+                )}
               </View>
               <ChevronRight size={20} color={COLORS.textLight} />
             </TouchableOpacity>
@@ -484,8 +565,8 @@ export const ListingDetailScreen: React.FC<ListingDetailScreenProps> = ({
                 if (!sellerIdResolved || !onChat) return;
                 onChat({
                   sellerId: sellerIdResolved,
-                  participantName: sellerProfile?.fullName || 'Người bán',
-                  participantAvatar: sellerProfile?.avatar,
+                  participantName: resolvedSellerProfile?.fullName || 'Người bán',
+                  participantAvatar: sellerAvatarResolved,
                   listingTitle: listing.title,
                   listingImage: listing.media?.thumbnails?.[0],
                   listingId: listing._id,
@@ -497,7 +578,7 @@ export const ListingDetailScreen: React.FC<ListingDetailScreenProps> = ({
             </TouchableOpacity>
             <Button
               title="Mua ngay"
-              onPress={() => onBuy?.(listing._id!)}
+              onPress={handleBuyClick}
               icon={<ShoppingCart size={18} color={COLORS.white} />}
               style={styles.buyBtn}
             />
@@ -771,6 +852,8 @@ const styles = StyleSheet.create({
     gap: SPACING.md,
   },
   sellerAvatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: COLORS.skeleton },
+  sellerAvatarPlaceholder: { backgroundColor: COLORS.primary, justifyContent: 'center', alignItems: 'center' },
+  sellerAvatarInitial: { color: COLORS.white, fontSize: 18, fontWeight: '700' },
   sellerInfo: { flex: 1 },
   sellerName: {
     fontSize: FONT_SIZES.base,
@@ -778,6 +861,24 @@ const styles = StyleSheet.create({
     color: COLORS.text,
   },
   sellerMeta: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
+  sellerTagsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+    marginTop: SPACING.sm,
+    flexWrap: 'wrap',
+  },
+  sellerBadgeTag: {
+    backgroundColor: COLORS.accentLight,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 3,
+    borderRadius: RADIUS.sm,
+  },
+  sellerBadgeTagText: {
+    fontSize: FONT_SIZES.xs,
+    color: COLORS.accentDark,
+    fontWeight: FONT_WEIGHTS.semibold,
+  },
   sellerRating: {
     fontSize: FONT_SIZES.sm,
     fontWeight: FONT_WEIGHTS.semibold,

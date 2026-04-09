@@ -127,7 +127,26 @@ export class MessageApiClient extends BaseApiClient {
   /**
    * Send chatbot message
    */
-  async sendChatbotMessage(data: { message: string; context?: Record<string, any> }): Promise<{ success: boolean; reply?: string; data?: { reply?: string } }> {
+  async sendChatbotMessage(data: {
+    message: string;
+    context?: Record<string, any>;
+  }): Promise<{
+    success: boolean;
+    reply?: string;
+    /** BE VeloBike: kèm listing gợi ý (đắt nhất, tìm theo từ khóa, …) */
+    listings?: Array<{
+      id: string;
+      title: string;
+      price: number;
+      image: string;
+      url: string;
+      brand?: string;
+      model?: string;
+      type?: string;
+    }>;
+    data?: { reply?: string };
+    message?: string;
+  }> {
     return this.post(ENDPOINTS.CHATBOT.MESSAGE, data);
   }
 
@@ -136,5 +155,14 @@ export class MessageApiClient extends BaseApiClient {
    */
   async getChatbotHistory(params?: { page?: number; limit?: number }): Promise<{ success: boolean; data: any[]; totalPages?: number; currentPage?: number }> {
     return this.get(ENDPOINTS.CHATBOT.HISTORY, params);
+  }
+
+  /** GET /chatbot/quota — hạn mức tin nhắn trong ngày (BE: protect) */
+  async getChatbotQuota(): Promise<{
+    success: boolean;
+    data?: { remaining: number; unlimited: boolean; message?: string };
+    message?: string;
+  }> {
+    return this.get(ENDPOINTS.CHATBOT.QUOTA);
   }
 }

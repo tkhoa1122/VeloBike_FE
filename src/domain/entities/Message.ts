@@ -222,6 +222,18 @@ export interface ChatbotAction {
   data: Record<string, any>;
 }
 
+/** Payload listing kèm POST /chatbot/webhook (BE: searchRelevantListings) */
+export interface ChatbotListingItem {
+  id: string;
+  title: string;
+  price: number;
+  image: string;
+  url: string;
+  brand?: string;
+  model?: string;
+  type?: string;
+}
+
 export interface SendChatbotMessageData {
   message: string;
   context?: {

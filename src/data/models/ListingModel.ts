@@ -89,7 +89,9 @@ export interface ListingModel {
       score: number;
       reviewCount: number;
     };
+    avatar?: string;
     badge?: string;
+    planType?: string;
   };
   /** Alias hiếm khi BE trả song song với sellerId */
   seller?: string | {
@@ -101,11 +103,13 @@ export interface ListingModel {
     };
     avatar?: string;
     badge?: string;
+    planType?: string;
   };
   
   views: number;
   saves: number;
   boostedUntil?: string; // ISO string
+  boostCount?: number;
   featured: boolean;
   badge?: string;
   

@@ -2,7 +2,7 @@
  * VeloBike Search Screen
  * Full search with filter modal, category chips, results grid
  */
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -26,6 +26,7 @@ import {
   MapPin,
   Heart,
   ChevronDown,
+  Rocket,
 } from 'lucide-react-native';
 import {
   COLORS,
@@ -39,7 +40,7 @@ import { Button } from '../../components/common/Button';
 import { formatCurrency, formatBikeCondition, formatBikeType } from '../../../utils/formatters';
 import { BIKE_TYPES, BIKE_CONDITIONS, POPULAR_BIKE_BRANDS } from '../../../config/constants';
 import { useListingStore } from '../../viewmodels/ListingStore';
-import type { Listing } from '../../../domain/entities/Listing';
+import type { Listing, ListingFilters, ListingSearchParams, ListingSortOptions } from '../../../domain/entities/Listing';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_W = (SCREEN_WIDTH - SPACING.xl * 2 - SPACING.md) / 2;
@@ -57,7 +58,7 @@ interface SearchScreenProps {
 
 export const SearchScreen: React.FC<SearchScreenProps> = ({ onListingPress }) => {
   const insets = useSafeAreaInsets();
-  const { listings, loadingState, totalCount, searchListings, getListings } = useListingStore();
+  const { listings, loadingState, totalCount, getListings } = useListingStore();
   const [query, setQuery] = useState('');
   const [sortBy, setSortBy] = useState('newest');
   const [showFilters, setShowFilters] = useState(false);
@@ -68,51 +69,123 @@ export const SearchScreen: React.FC<SearchScreenProps> = ({ onListingPress }) =>
   const [priceMax, setPriceMax] = useState('');
   const loading = loadingState === 'loading';
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasMountedRef = useRef(false);
+  const didSkipInitialDebounceRef = useRef(false);
+
+  const boostedTopTwo = useMemo(() => {
+    return [...listings]
+      .filter(item => (item.boostCount ?? 0) > 0)
+      .sort((a, b) => (b.boostCount ?? 0) - (a.boostCount ?? 0))
+      .slice(0, 2);
+  }, [listings]);
+
+  const regularResults = useMemo(() => {
+    if (boostedTopTwo.length === 0) return listings;
+    const boostedIds = new Set(boostedTopTwo.map(item => item._id));
+    return listings.filter(item => !boostedIds.has(item._id));
+  }, [listings, boostedTopTwo]);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
   }, [fadeAnim]);
 
-  // Initial load
-  useEffect(() => {
-    getListings({ page: 1, limit: 20 });
-  }, [getListings]);
-
   const activeFilterCount = [selectedType, selectedCondition, selectedBrand, priceMin, priceMax].filter(Boolean).length;
 
-  const handleSearch = useCallback(() => {
-    const filters: any = {};
-    if (selectedType) filters.type = selectedType;
-    if (selectedCondition) filters.condition = selectedCondition;
+  const clearDebounce = useCallback(() => {
+    if (searchDebounceRef.current) {
+      clearTimeout(searchDebounceRef.current);
+      searchDebounceRef.current = null;
+    }
+  }, []);
+
+  const buildFilters = useCallback((): ListingFilters => {
+    const filters: ListingFilters = {};
+    if (selectedType) filters.type = selectedType as any;
+    if (selectedCondition) filters.condition = selectedCondition as any;
     if (selectedBrand) filters.brand = selectedBrand;
     if (priceMin) filters.minPrice = Number(priceMin);
     if (priceMax) filters.maxPrice = Number(priceMax);
-    if (sortBy) filters.sort = sortBy;
+    return filters;
+  }, [selectedType, selectedCondition, selectedBrand, priceMin, priceMax]);
 
-    if (query.trim()) {
-      searchListings(query.trim(), filters);
-    } else {
-      getListings({ page: 1, limit: 20, ...filters });
+  const mapSortByToApi = useCallback((): ListingSortOptions => {
+    switch (sortBy) {
+      case 'price_asc':
+        return { field: 'price', order: 'asc' };
+      case 'price_desc':
+        return { field: 'price', order: 'desc' };
+      case 'popular':
+        return { field: 'views', order: 'desc' };
+      case 'newest':
+      default:
+        return { field: 'createdAt', order: 'desc' };
     }
-  }, [query, selectedType, selectedCondition, selectedBrand, priceMin, priceMax, sortBy, searchListings, getListings]);
+  }, [sortBy]);
 
-  const scheduleSearch = useCallback(() => {
-    if (searchDebounceRef.current) {
-      clearTimeout(searchDebounceRef.current);
-    }
-    searchDebounceRef.current = setTimeout(() => {
-      handleSearch();
-    }, 250);
-  }, [handleSearch]);
+  const buildSearchParams = useCallback(
+    (queryOverride?: string): ListingSearchParams => {
+      const trimmedQuery = (queryOverride ?? query).trim();
+      const filters = buildFilters();
+      const filtersToSend = Object.keys(filters).length > 0 ? filters : undefined;
 
+      return {
+        page: 1,
+        limit: 20,
+        ...(trimmedQuery ? { query: trimmedQuery } : {}),
+        ...(filtersToSend ? { filters: filtersToSend } : {}),
+        sort: mapSortByToApi(),
+      };
+    },
+    [query, buildFilters, mapSortByToApi],
+  );
+
+  const performSearch = useCallback(
+    (queryOverride?: string) => {
+      clearDebounce();
+      getListings(buildSearchParams(queryOverride));
+    },
+    [clearDebounce, getListings, buildSearchParams],
+  );
+
+  // Initial load (chạy 1 lần) + đảm bảo có sort & filter thống nhất
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
+    clearDebounce();
+    getListings(buildSearchParams());
+    hasMountedRef.current = true;
+    return () => clearDebounce();
+  }, []);
+
+  // Debounce: gõ chữ / đổi filter / đổi sort đều áp dụng sau ~250ms
+  useEffect(() => {
+    if (!hasMountedRef.current) return;
+    // Skip the first debounce tick after initial load to avoid duplicate API calls.
+    if (!didSkipInitialDebounceRef.current) {
+      didSkipInitialDebounceRef.current = true;
+      return;
+    }
+    clearDebounce();
+    searchDebounceRef.current = setTimeout(() => {
+      performSearch();
+    }, 250);
+
     return () => {
       if (searchDebounceRef.current) {
         clearTimeout(searchDebounceRef.current);
       }
     };
-  }, []);
+  }, [
+    query,
+    selectedType,
+    selectedCondition,
+    selectedBrand,
+    priceMin,
+    priceMax,
+    sortBy,
+    performSearch,
+    clearDebounce,
+  ]);
 
   const clearFilters = useCallback(() => {
     setSelectedType(null);
@@ -140,6 +213,29 @@ export const SearchScreen: React.FC<SearchScreenProps> = ({ onListingPress }) =>
     </TouchableOpacity>
   ), [onListingPress]);
 
+  const renderBoostedCard = useCallback((item: Listing) => (
+    <TouchableOpacity
+      key={item._id}
+      style={[styles.card, styles.boostedCard]}
+      activeOpacity={0.85}
+      onPress={() => onListingPress?.(item._id!)}
+    >
+      <View style={styles.imgWrap}>
+        <Image source={{ uri: item.media?.thumbnails?.[0] }} style={styles.img} />
+        <View style={styles.boostedBadge}>
+          <Rocket size={10} color={COLORS.accentDark} />
+          <Text style={styles.boostedBadgeText}>Boost x{item.boostCount ?? 0}</Text>
+        </View>
+      </View>
+      <View style={styles.cardInfo}>
+        <Text style={styles.cardBrand}>{item.generalInfo?.brand}</Text>
+        <Text style={styles.cardTitle} numberOfLines={2}>{item.title}</Text>
+        <Text style={styles.cardPrice}>{formatCurrency(item.pricing?.amount ?? 0)}</Text>
+        <View style={styles.cardMeta}><MapPin size={10} color={COLORS.textLight} /><Text style={styles.cardMetaTxt}>{item.location?.address}</Text></View>
+      </View>
+    </TouchableOpacity>
+  ), [onListingPress]);
+
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.white} />
@@ -148,8 +244,25 @@ export const SearchScreen: React.FC<SearchScreenProps> = ({ onListingPress }) =>
       <Animated.View style={[styles.header, { opacity: fadeAnim }]}>
         <View style={styles.searchBox}>
           <Search size={18} color={COLORS.textLight} />
-          <TextInput style={styles.searchInput} placeholder="Tìm xe đạp, phụ kiện..." placeholderTextColor={COLORS.textLight} value={query} onChangeText={setQuery} onSubmitEditing={handleSearch} returnKeyType="search" />
-          {query.length > 0 && <TouchableOpacity onPress={() => { setQuery(''); handleSearch(); }}><X size={16} color={COLORS.textLight} /></TouchableOpacity>}
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Tìm xe đạp, phụ kiện..."
+            placeholderTextColor={COLORS.textLight}
+            value={query}
+            onChangeText={setQuery}
+            onSubmitEditing={() => performSearch()}
+            returnKeyType="search"
+          />
+          {query.length > 0 && (
+            <TouchableOpacity
+              onPress={() => {
+                setQuery('');
+                performSearch('');
+              }}
+            >
+              <X size={16} color={COLORS.textLight} />
+            </TouchableOpacity>
+          )}
         </View>
         <TouchableOpacity style={styles.filterBtn} onPress={() => setShowFilters(true)}>
           <SlidersHorizontal size={20} color={COLORS.primary} />
@@ -166,7 +279,7 @@ export const SearchScreen: React.FC<SearchScreenProps> = ({ onListingPress }) =>
         contentContainerStyle={styles.chipScroll}
       >
         {BIKE_TYPES.map(t => (
-          <TouchableOpacity key={t} style={[styles.chip, selectedType === t && styles.chipActive]} onPress={() => { setSelectedType(selectedType === t ? null : t); scheduleSearch(); }}>
+          <TouchableOpacity key={t} style={[styles.chip, selectedType === t && styles.chipActive]} onPress={() => setSelectedType(selectedType === t ? null : t)}>
             <Text style={[styles.chipText, selectedType === t && styles.chipTextActive]}>{formatBikeType(t)}</Text>
           </TouchableOpacity>
         ))}
@@ -175,7 +288,17 @@ export const SearchScreen: React.FC<SearchScreenProps> = ({ onListingPress }) =>
       {/* Sort */}
       <View style={styles.sortRow}>
         <Text style={styles.resultCount}>{totalCount} kết quả</Text>
-        <TouchableOpacity style={styles.sortBtn}><Text style={styles.sortTxt}>{SORT_OPTIONS.find(s => s.value === sortBy)?.label}</Text><ChevronDown size={14} color={COLORS.textSecondary} /></TouchableOpacity>
+        <TouchableOpacity
+          style={styles.sortBtn}
+          onPress={() => {
+            const idx = SORT_OPTIONS.findIndex((s) => s.value === sortBy);
+            const next = SORT_OPTIONS[(idx + 1) % SORT_OPTIONS.length]?.value ?? 'newest';
+            setSortBy(next);
+          }}
+        >
+          <Text style={styles.sortTxt}>{SORT_OPTIONS.find(s => s.value === sortBy)?.label}</Text>
+          <ChevronDown size={14} color={COLORS.textSecondary} />
+        </TouchableOpacity>
       </View>
 
       {/* Results */}
@@ -184,7 +307,26 @@ export const SearchScreen: React.FC<SearchScreenProps> = ({ onListingPress }) =>
       ) : listings.length === 0 ? (
         <View style={styles.center}><Search size={48} color={COLORS.textLight} /><Text style={styles.emptyTitle}>Không tìm thấy</Text><Text style={styles.emptySub}>Thử thay đổi bộ lọc hoặc từ khóa</Text></View>
       ) : (
-        <FlatList data={listings} numColumns={2} keyExtractor={i => i._id!} renderItem={renderItem} columnWrapperStyle={styles.row} contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false} />
+        <FlatList
+          data={regularResults}
+          numColumns={2}
+          keyExtractor={i => i._id!}
+          renderItem={renderItem}
+          columnWrapperStyle={styles.row}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+          ListHeaderComponent={
+            boostedTopTwo.length > 0 ? (
+              <View style={styles.boostedSection}>
+                <Text style={styles.boostedTitle}>Nổi bật gợi ý</Text>
+                <View style={styles.boostedRow}>
+                  {boostedTopTwo.map(renderBoostedCard)}
+                </View>
+                <Text style={styles.resultLabel}>Kết quả tìm kiếm</Text>
+              </View>
+            ) : null
+          }
+        />
       )}
 
       {/* Filter modal */}
@@ -218,7 +360,14 @@ export const SearchScreen: React.FC<SearchScreenProps> = ({ onListingPress }) =>
             </ScrollView>
             <View style={styles.modalActions}>
               <Button title="Xóa bộ lọc" onPress={clearFilters} variant="ghost" style={{ flex: 1 }} />
-              <Button title={`Áp dụng${activeFilterCount ? ` (${activeFilterCount})` : ''}`} onPress={() => { setShowFilters(false); handleSearch(); }} style={{ flex: 2 }} />
+              <Button
+                title={`Áp dụng${activeFilterCount ? ` (${activeFilterCount})` : ''}`}
+                onPress={() => {
+                  setShowFilters(false);
+                  performSearch();
+                }}
+                style={{ flex: 2 }}
+              />
             </View>
           </View>
         </View>
@@ -259,6 +408,43 @@ const styles = StyleSheet.create({
   cardPrice: { fontSize: FONT_SIZES.base, fontWeight: FONT_WEIGHTS.bold, color: COLORS.accent },
   cardMeta: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 4 },
   cardMetaTxt: { fontSize: 11, color: COLORS.textLight },
+  boostedSection: { marginBottom: SPACING.sm },
+  boostedRow: { flexDirection: 'row', gap: SPACING.md, marginBottom: SPACING.sm },
+  boostedTitle: {
+    fontSize: FONT_SIZES.base,
+    color: COLORS.accentDark,
+    fontWeight: FONT_WEIGHTS.bold,
+    marginBottom: SPACING.sm,
+  },
+  boostedCard: {
+    borderWidth: 1.5,
+    borderColor: '#FCD34D',
+    backgroundColor: '#FFFBEB',
+  },
+  boostedBadge: {
+    position: 'absolute',
+    top: 6,
+    left: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#FEF3C7',
+    borderRadius: RADIUS.xs,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  boostedBadgeText: {
+    fontSize: 10,
+    color: COLORS.accentDark,
+    fontWeight: FONT_WEIGHTS.bold,
+  },
+  resultLabel: {
+    fontSize: FONT_SIZES.sm,
+    color: COLORS.textSecondary,
+    fontWeight: FONT_WEIGHTS.semibold,
+    marginTop: SPACING.md,
+    marginBottom: SPACING.sm,
+  },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: SPACING.md },
   emptyTitle: { fontSize: FONT_SIZES.lg, fontWeight: FONT_WEIGHTS.semibold, color: COLORS.text },
   emptySub: { fontSize: FONT_SIZES.md, color: COLORS.textLight },

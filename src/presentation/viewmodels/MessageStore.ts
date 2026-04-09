@@ -2,7 +2,11 @@ import { create } from 'zustand';
 import { LoadingState } from '../../domain/entities/Common';
 import { container } from '../../di/Container';
 import type { ConversationEntry, MessageEntry } from '../../data/repositories/MessageRepositoryImpl';
-import type { ChatbotConversation, SendChatbotMessageData } from '../../domain/entities/Message';
+import type {
+  ChatbotConversation,
+  SendChatbotMessageData,
+  ChatbotListingItem,
+} from '../../domain/entities/Message';
 import { useAuthStore } from './AuthStore';
 
 interface MessageState {
@@ -21,8 +25,15 @@ interface MessageState {
     content: string;
     attachments?: string[];
   }) => Promise<boolean>;
-  sendChatbotMessage: (data: SendChatbotMessageData) => Promise<string | null>;
+  sendChatbotMessage: (
+    data: SendChatbotMessageData,
+  ) => Promise<{ reply: string; listings?: ChatbotListingItem[] } | null>;
   getChatbotHistory: (page?: number, limit?: number) => Promise<ChatbotConversation[]>;
+  fetchChatbotQuota: () => Promise<{
+    remaining: number;
+    unlimited: boolean;
+    message?: string;
+  } | null>;
   markAsRead: (messageId: string) => Promise<void>;
   clearMessages: () => void;
   clearError: () => void;
@@ -87,13 +98,33 @@ export const useMessageStore = create<MessageState>((set, get) => ({
     }
   },
 
-  sendChatbotMessage: async (data): Promise<string | null> => {
+  sendChatbotMessage: async (data): Promise<{ reply: string; listings?: ChatbotListingItem[] } | null> => {
     try {
       const repo = container().messageRepository;
       const result = await repo.sendChatbotMessage(data);
-      return result.success && result.data ? result.data.reply : null;
+      if (result.success && result.data) {
+        return {
+          reply: result.data.reply,
+          listings: result.data.listings,
+        };
+      }
+      set({ error: result.message || 'Chatbot không phản hồi' });
+      return null;
     } catch (error) {
       set({ error: error instanceof Error ? error.message : 'Không gửi được tin nhắn chatbot' });
+      return null;
+    }
+  },
+
+  fetchChatbotQuota: async () => {
+    try {
+      const repo = container().messageRepository;
+      const result = await repo.getChatbotQuota();
+      if (result.success && result.data) {
+        return result.data;
+      }
+      return null;
+    } catch {
       return null;
     }
   },

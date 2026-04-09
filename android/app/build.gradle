@@ -110,6 +110,8 @@ android {
 dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
+    // Required by AndroidX Photo Picker contracts used by react-native-image-picker.
+    implementation("androidx.activity:activity:1.9.3")
     
     // Google Play Services for authentication
     implementation("com.google.android.gms:play-services-auth:20.7.0")

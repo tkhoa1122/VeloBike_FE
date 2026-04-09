@@ -1,13 +1,13 @@
 /**
  * Main Bottom Tab Navigator
  * Each tab has its own stack for inner navigation
- * HomeTab | SearchTab | Wishlist | MessagesTab | ProfileTab
+ * HomeTab | SearchTab | Wishlist | MessagesTab | AiAssistantTab | ProfileTab
  */
 import React from 'react';
 import { StyleSheet, Platform } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { Home, Search, Heart, MessageCircle, UserCircle } from 'lucide-react-native';
+import { Home, Search, Heart, MessageCircle, UserCircle, Bot } from 'lucide-react-native';
 import type {
   MainTabParamList,
   HomeStackParamList,
@@ -46,6 +46,7 @@ import {
   SellerReceivedReviewsScreen,
 } from '../screens/seller';
 import { BuyerWalletScreen, BuyerPaymentHistoryScreen } from '../screens/buyer';
+import ChatbotScreen from '../screens/chatbot/ChatbotScreen';
 import { useMessageStore } from '../viewmodels/MessageStore';
 
 import { COLORS, FONT_WEIGHTS, SHADOWS, SPACING, LAYOUT } from '../../config/theme';
@@ -87,6 +88,12 @@ const HomeStackScreen: React.FC = () => (
             })
           }
           onBuy={(listingId) => navigation.navigate('CreateOrder', { listingId })}
+          onEditProfile={() => {
+            // Navigate to Profile tab, then to EditProfile screen
+            (navigation as any).navigate('ProfileTab', {
+              screen: 'EditProfile',
+            });
+          }}
         />
       )}
     </HomeStack.Screen>
@@ -177,6 +184,11 @@ const SearchStackScreen: React.FC = () => (
             })
           }
           onBuy={(listingId) => navigation.navigate('CreateOrder', { listingId })}
+          onEditProfile={() => {
+            (navigation as any).navigate('ProfileTab', {
+              screen: 'EditProfile',
+            });
+          }}
         />
       )}
     </SearchStack.Screen>
@@ -294,6 +306,7 @@ const ProfileStackScreen: React.FC<ProfileStackScreenProps> = ({ onLogout }) => 
           onSellerDashboard={() => navigation.navigate('SellerDashboard')}
           onSubscriptionPlans={() => navigation.navigate('SubscriptionPlans')}
           onManageSubscription={() => navigation.navigate('ManageSubscription')}
+          onBuyerWallet={() => navigation.navigate('BuyerWallet')}
         />
       )}
     </ProfileStack.Screen>
@@ -398,6 +411,7 @@ const ProfileStackScreen: React.FC<ProfileStackScreenProps> = ({ onLogout }) => 
             navigation.navigate('SubscriptionPlans');
           }}
           onViewReviews={() => navigation.navigate('SellerReceivedReviews')}
+          onOrderPress={(orderId) => navigation.navigate('OrderDetail', { orderId })}
         />
       )}
     </ProfileStack.Screen>
@@ -424,6 +438,10 @@ const ProfileStackScreen: React.FC<ProfileStackScreenProps> = ({ onLogout }) => 
             })
           }
           onBuy={(listingId) => navigation.navigate('CreateOrder', { listingId })}
+          onEditProfile={() => {
+            // Already in ProfileStack, can navigate directly
+            navigation.navigate('EditProfile' as any);
+          }}
         />
       )}
     </ProfileStack.Screen>
@@ -452,6 +470,7 @@ const ProfileStackScreen: React.FC<ProfileStackScreenProps> = ({ onLogout }) => 
           {({ navigation }) => (
             <SellerListingsScreen
               onBack={() => navigation.navigate('SellerDashboard')}
+              onManageSubscription={() => navigation.navigate('ManageSubscription')}
               onCreateListing={() => {
                 setEditingListing(null);
                 navigation.navigate('SellerCreateListing');
@@ -478,6 +497,9 @@ const ProfileStackScreen: React.FC<ProfileStackScreenProps> = ({ onLogout }) => 
                 setEditingListing(null);
                 navigation.navigate('SellerListings');
               }}
+              onEditProfile={() => {
+                navigation.navigate('EditProfile' as any);
+              }}
             />
           )}
         </ProfileStack.Screen>
@@ -486,9 +508,6 @@ const ProfileStackScreen: React.FC<ProfileStackScreenProps> = ({ onLogout }) => 
       {({ navigation }) => (
         <SellerOrdersScreen
           onBack={() => navigation.navigate('SellerDashboard')}
-          onViewOrderDetail={(order) => {
-            // TODO: Show order detail modal
-          }}
           onMessage={(buyerId, opts) =>
             navigation.navigate('Chat', {
               buyerId,
@@ -581,6 +600,15 @@ export const MainTabs: React.FC<MainTabsProps> = ({ onLogout }) => {
           tabBarLabel: 'Tin nhắn',
           tabBarIcon: ({ color, size }) => <MessageCircle size={size} color={color} />,
           tabBarBadge: unreadCount > 0 ? unreadCount : undefined,
+        }}
+      />
+
+      <Tab.Screen
+        name="AiAssistantTab"
+        component={ChatbotScreen}
+        options={{
+          tabBarLabel: 'Trợ lý AI',
+          tabBarIcon: ({ color, size }) => <Bot size={size} color={color} />,
         }}
       />
 

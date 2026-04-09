@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, Image, TouchableOpacity } from 'react-native';
 import tw from 'twrnc';
-import { Eye, Heart, ChevronRight } from 'lucide-react-native';
+import { Eye, Rocket, ChevronRight } from 'lucide-react-native';
 import { COLORS } from '../../../../config/theme';
 
 interface ListingCardProps {
@@ -10,6 +10,7 @@ interface ListingCardProps {
   image: string;
   price: number;
   views: number;
+  boostCount?: number;
   status: 'DRAFT' | 'PUBLISHED' | 'SOLD' | 'REJECTED';
   onPress: () => void;
 }
@@ -45,6 +46,7 @@ export const ListingCard: React.FC<ListingCardProps> = ({
   image,
   price,
   views,
+  boostCount,
   status,
   onPress,
 }) => {
@@ -84,6 +86,10 @@ export const ListingCard: React.FC<ListingCardProps> = ({
           <View style={tw`flex-row items-center`}>
             <Eye size={14} color={COLORS.textSecondary} />
             <Text style={tw`text-xs text-gray-500 ml-1`}>{views}</Text>
+          </View>
+          <View style={tw`flex-row items-center ml-2`}>
+            <Rocket size={14} color="#B45309" />
+            <Text style={tw`text-xs text-amber-700 ml-1 font-semibold`}>x{boostCount ?? 0}</Text>
           </View>
         </View>
       </View>

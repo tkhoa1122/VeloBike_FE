@@ -363,6 +363,7 @@ export class ListingRepositoryImpl implements ListingRepository {
       views: model.views,
       saves: model.saves,
       boostedUntil: model.boostedUntil ? new Date(model.boostedUntil) : undefined,
+      boostCount: model.boostCount ?? 0,
       featured: model.featured,
       badge: model.badge,
       inspectionRequired: model.inspectionRequired,

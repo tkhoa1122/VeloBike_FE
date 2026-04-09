@@ -7,7 +7,6 @@ import {
   ProfileResponseModel, 
   VerifyEmailResponseModel,
   RefreshTokenResponseModel,
-  // AvatarUploadResponseModel, // TODO: BE chưa có route
   UserModel 
 } from '../models/UserModel';
 import { LoginCredentials, RegisterData, UpdateProfileData, KycDocument } from '../../domain/entities/User';
@@ -15,6 +14,13 @@ import { LoginCredentials, RegisterData, UpdateProfileData, KycDocument } from '
 const KYC_STATUS_CACHE_KEY = 'kyc_my_status_cache_v1';
 
 export class AuthApiClient extends BaseApiClient {
+  private normalizeUploadPart(file: { uri: string; name: string; type: string }, fallbackPrefix: string) {
+    const rawUri = String(file?.uri || '').trim();
+    const uriFileName = rawUri.split('/').pop()?.split('?')[0] || '';
+    const name = String(file?.name || '').trim() || uriFileName || `${fallbackPrefix}_${Date.now()}.jpg`;
+    const type = String(file?.type || '').trim() || 'image/jpeg';
+    return { uri: rawUri, name, type };
+  }
   /**
    * Register new user
    */
@@ -97,7 +103,30 @@ export class AuthApiClient extends BaseApiClient {
     return this.put(ENDPOINTS.USERS.ME, data);
   }
 
-  // uploadAvatar: TODO - BE chưa có route /auth/upload-avatar
+  /**
+   * Get public user profile by user id
+   */
+  async getUserById(id: string): Promise<{ success: boolean; data?: any; message?: string }> {
+    return this.get(ENDPOINTS.USERS.DETAIL(id));
+  }
+
+  async uploadAvatar(file: {
+    uri: string;
+    name?: string;
+    type?: string;
+  }): Promise<{ success: boolean; message?: string; data?: any; avatarUrl?: string }> {
+    const formData = new FormData();
+    const avatar = this.normalizeUploadPart(
+      {
+        uri: file.uri,
+        name: file.name || '',
+        type: file.type || '',
+      },
+      'avatar',
+    );
+    formData.append('avatar', avatar as any);
+    return this.upload(ENDPOINTS.USERS.AVATAR, formData, 'PUT');
+  }
 
   /**
    * Upload KYC documents
@@ -126,8 +155,10 @@ export class AuthApiClient extends BaseApiClient {
     selfie: { uri: string; name: string; type: string };
   }): Promise<{ success: boolean; message?: string; data?: any }> {
     const formData = new FormData();
-    formData.append('idCardFront', data.idCardFront as any);
-    formData.append('selfie', data.selfie as any);
+    const idCardFront = this.normalizeUploadPart(data.idCardFront, 'id_card_front');
+    const selfie = this.normalizeUploadPart(data.selfie, 'selfie');
+    formData.append('idCardFront', idCardFront as any);
+    formData.append('selfie', selfie as any);
     return this.upload(ENDPOINTS.KYC.SUBMIT, formData);
   }
 

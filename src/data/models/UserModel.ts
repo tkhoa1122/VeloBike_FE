@@ -102,6 +102,7 @@ export interface AvatarUploadResponseModel {
 
 export interface ProfileResponseModel {
   success: boolean;
-  user: UserModel;
+  user?: UserModel;
+  data?: UserModel;
   message?: string;
 }

@@ -5,7 +5,8 @@ import {
   ConversationSearchParams,
   MessageSearchParams,
   ChatbotConversation,
-  SendChatbotMessageData 
+  SendChatbotMessageData,
+  ChatbotListingItem,
 } from '../entities/Message';
 import { ApiResponse, PaginatedResponse } from '../entities/Common';
 
@@ -36,7 +37,9 @@ export interface MessageRepository {
   sendAudio(conversationId: string, audioUrl: string, duration: number): Promise<ApiResponse<Message>>;
   
   // Chatbot
-  sendChatbotMessage(data: SendChatbotMessageData): Promise<ApiResponse<{ reply: string }>>;
+  sendChatbotMessage(
+    data: SendChatbotMessageData,
+  ): Promise<ApiResponse<{ reply: string; listings?: ChatbotListingItem[] }>>;
   getChatbotHistory(page?: number, limit?: number): Promise<PaginatedResponse<ChatbotConversation>>;
   
   // Real-time subscriptions

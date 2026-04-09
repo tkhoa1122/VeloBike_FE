@@ -24,6 +24,7 @@ export interface Listing {
   
   // Premium features
   boostedUntil?: Date;
+  boostCount?: number;
   featured: boolean;
   badge?: string;
   

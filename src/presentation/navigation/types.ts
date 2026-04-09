@@ -30,6 +30,8 @@ export type MainTabParamList = {
   SearchTab: NavigatorScreenParams<SearchStackParamList>;
   Wishlist: undefined;
   MessagesTab: NavigatorScreenParams<MessagesStackParamList>;
+  /** Trợ lý AI — cùng API POST /chatbot/webhook, GET /chatbot/history, GET /chatbot/quota (VeloBike BE) */
+  AiAssistantTab: undefined;
   ProfileTab: NavigatorScreenParams<ProfileStackParamList>;
 };
 

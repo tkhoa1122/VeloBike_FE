@@ -44,6 +44,7 @@ export const ENDPOINTS = {
 
   USERS: {
     ME: '/users/me',
+    AVATAR: '/users/me/avatar',
     DETAIL: (id: string) => `/users/${id}`,
     BANK: '/users/me/bank',
     ME_WALLET: '/users/me/wallet',
@@ -75,6 +76,7 @@ export const ENDPOINTS = {
     DETAIL: (id: string) => `/orders/${id}`,
     MY_ORDERS: '/orders',
     LIST: '/orders',
+    SHIPPING_ESTIMATE: '/orders/shipping-estimate',
     TIMELINE: (id: string) => `/orders/${id}/timeline`,
     UPDATE_STATUS: (id: string) => `/orders/${id}/status`,
     UPDATE_SHIPPING_ADDRESS: (id: string) => `/orders/${id}/shipping-address`,

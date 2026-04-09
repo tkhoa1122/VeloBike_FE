@@ -18,10 +18,14 @@ import Toast from 'react-native-toast-message';
 import { COLORS, SPACING, FONT_SIZES, FONT_WEIGHTS, RADIUS, SHADOWS } from '../../../config/theme';
 import { container } from '../../../di/Container';
 import type { CreateListingData } from '../../../domain/entities/Listing';
+import { useImagePicker } from '../../hooks/useImagePicker';
+import { useAuthStore } from '../../viewmodels/AuthStore';
+import { checkProfileCompleteness } from '../../../utils/profileValidation';
 
 interface SellerCreateListingScreenProps {
   onBack: () => void;
   onSuccess?: () => void;
+  onEditProfile?: () => void;
   initialListing?: any;
 }
 
@@ -38,9 +42,11 @@ const toBikeType = (value: string) => {
   return ['ROAD', 'MTB', 'GRAVEL', 'TRIATHLON', 'E_BIKE'].includes(normalized) ? normalized : 'MTB';
 };
 
-export const SellerCreateListingScreen: React.FC<SellerCreateListingScreenProps> = ({ onBack, onSuccess, initialListing }) => {
+export const SellerCreateListingScreen: React.FC<SellerCreateListingScreenProps> = ({ onBack, onSuccess, onEditProfile, initialListing }) => {
   const insets = useSafeAreaInsets();
+  const { user } = useAuthStore();
   const [saving, setSaving] = useState(false);
+  const { showImagePicker } = useImagePicker({ maxFiles: 8, quality: 0.8 });
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -128,24 +134,12 @@ export const SellerCreateListingScreen: React.FC<SellerCreateListingScreenProps>
         return;
       }
 
-      const result = await launchImageLibrary({
-        mediaType: 'photo',
-        selectionLimit: remaining,
-        includeBase64: false,
-      });
-      if (result.errorCode || result.didCancel || !result.assets?.length) {
-        const msg = result.errorMessage || '';
-        if (msg.includes('PICK_IMAGES') || msg.includes('Activity')) {
-          Alert.alert(
-            'Không mở được thư viện ảnh',
-            'Một số emulator/Android không có Photo Picker hệ thống.\n\n• Dán URL ảnh vào ô bên dưới (khuyến nghị khi dev)\n• Hoặc thử thiết bị thật / emulator có Google Play (Android 13+).'
-          );
-        } else if (!result.didCancel) {
-          Alert.alert('Không mở được thư viện ảnh', msg || 'Thiết bị không hỗ trợ chọn ảnh.');
-        }
-        return;
-      }
-      const newItems = result.assets.map((asset) => asset.uri).filter(Boolean) as string[];
+      // Dùng modal chọn nguồn ảnh (Camera/Thư viện). useImagePicker đã có fallback cho emulator.
+      const picked = await showImagePicker(remaining > 1);
+      const newItems = picked
+        .map((asset) => asset.uri)
+        .filter(Boolean)
+        .slice(0, remaining) as string[];
       if (!newItems.length) return;
       setImages((prev) => [...prev, ...newItems]);
     } catch (e: any) {
@@ -174,6 +168,30 @@ export const SellerCreateListingScreen: React.FC<SellerCreateListingScreenProps>
   };
 
   const handleSubmit = async () => {
+    // Check profile completeness first
+    const profileCheck = checkProfileCompleteness(user);
+    if (!profileCheck.isComplete) {
+      Alert.alert(
+        'Hồ sơ chưa đầy đủ',
+        profileCheck.message || 'Vui lòng cập nhật đầy đủ thông tin hồ sơ (họ tên, số điện thoại, địa chỉ) trước khi tạo tin đăng.',
+        [
+          { text: 'Hủy', style: 'cancel' },
+          {
+            text: 'Cập nhật hồ sơ',
+            onPress: () => {
+              if (onEditProfile) {
+                onEditProfile();
+              } else {
+                onBack();
+                Alert.alert('Thông báo', 'Vui lòng vào Profile > Chỉnh sửa hồ sơ để cập nhật thông tin.');
+              }
+            },
+          },
+        ],
+      );
+      return;
+    }
+
     if (!isValid) {
       Alert.alert('Thiếu thông tin', 'Vui lòng điền đủ các trường bắt buộc.');
       return;
@@ -214,6 +232,24 @@ export const SellerCreateListingScreen: React.FC<SellerCreateListingScreenProps>
       const localImageUris = images.filter((item) => item.startsWith('file:') || item.startsWith('content:'));
       const uploadedImageUrls = await Promise.all(localImageUris.map((uri) => uploadLocalFile(uri, 'image')));
       const thumbnails = [...directImages, ...imageUrls, ...uploadedImageUrls.filter(Boolean)] as string[];
+
+      if (localImageUris.length > 0 && uploadedImageUrls.filter(Boolean).length === 0) {
+        Toast.show({
+          type: 'error',
+          text1: 'Upload ảnh thất bại',
+          text2: 'Không thể upload ảnh lên cloud. Vui lòng chọn lại ảnh hoặc kiểm tra mạng.',
+        });
+        return;
+      }
+
+      if (thumbnails.length === 0) {
+        Toast.show({
+          type: 'error',
+          text1: 'Thiếu ảnh sản phẩm',
+          text2: 'Cần ít nhất 1 ảnh sản phẩm (upload từ máy hoặc nhập URL ảnh).',
+        });
+        return;
+      }
 
       let finalVideoUrl = videoData || videoUrl.trim() || undefined;
       if (videoUrl.startsWith('file:') || videoUrl.startsWith('content:')) {
@@ -490,7 +526,7 @@ export const SellerCreateListingScreen: React.FC<SellerCreateListingScreenProps>
             </View>
           )}
 
-          {renderLabel('Hình ảnh sản phẩm', false, '(không bắt buộc khi test)')}
+          {renderLabel('Hình ảnh sản phẩm', true, '(cần ít nhất 1 ảnh)')}
           <TouchableOpacity style={styles.uploadBox} onPress={pickImages}>
             <ImagePlus size={18} color="#2563EB" />
             <Text style={styles.uploadTitle}>Kéo thả ảnh hoặc chạm để chọn</Text>

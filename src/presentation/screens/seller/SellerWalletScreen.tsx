@@ -22,14 +22,13 @@ import {
   Animated,
   StatusBar,
   ActivityIndicator,
-  SafeAreaView,
   Modal,
   TextInput,
   FlatList,
   Alert,
   Image,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   ChevronLeft,
   ArrowDownLeft,

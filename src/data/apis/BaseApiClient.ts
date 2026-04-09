@@ -368,15 +368,35 @@ export class BaseApiClient {
   /**
    * Upload file
    */
-  protected async upload<T = any>(endpoint: string, formData: FormData): Promise<T> {
+  protected async upload<T = any>(
+    endpoint: string,
+    formData: FormData,
+    method: 'POST' | 'PUT' = 'POST'
+  ): Promise<T> {
     const url = `${this.baseURL}${endpoint}`;
-    const headers = await this.getUploadHeaders();
+    const doUpload = async (): Promise<Response> => {
+      const headers = await this.getUploadHeaders();
+      return fetch(url, {
+        method,
+        headers,
+        body: formData,
+      });
+    };
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers,
-      body: formData,
-    });
+    let response = await doUpload();
+
+    // Keep upload requests consistent with request(): refresh token on first 401.
+    if (response.status === 401) {
+      const refreshed = await this.attemptTokenRefresh();
+      if (refreshed) {
+        response = await doUpload();
+      } else {
+        await this.clearStoredTokens();
+        const error = new Error('Phiên đăng nhập đã hết hạn');
+        (error as any).status = 401;
+        throw error;
+      }
+    }
 
     if (!response.ok) {
       await this.handleErrorResponse(response);

@@ -19,6 +19,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { COLORS, SPACING, FONT_SIZES, FONT_WEIGHTS, SHADOWS, RADIUS } from '../../../config/theme';
 import { container } from '../../../di/Container';
 import { ENV } from '../../../config/environment';
+import { useAuthStore } from '../../viewmodels/AuthStore';
 
 type ListingStatus = 'DRAFT' | 'PUBLISHED' | 'PENDING_APPROVAL' | 'SOLD' | 'RESERVED' | 'REJECTED';
 
@@ -29,6 +30,7 @@ interface SellerListingItem {
   status: ListingStatus | string;
   views?: number;
   boostedUntil?: string;
+  boostCount?: number;
   createdAt?: string;
   media?: { thumbnails?: string[] };
   pricing?: { amount?: number };
@@ -39,6 +41,7 @@ interface SellerListingsScreenProps {
   onEditListing?: (listing: unknown) => void;
   onViewListing?: (listing: unknown) => void;
   onCreateListing?: () => void;
+  onManageSubscription?: () => void;
 }
 
 const statusColor = (status: string) => {
@@ -70,16 +73,61 @@ export const SellerListingsScreen: React.FC<SellerListingsScreenProps> = ({
   onEditListing,
   onViewListing,
   onCreateListing,
+  onManageSubscription,
 }) => {
+  const { user } = useAuthStore();
   const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [allListings, setAllListings] = useState<SellerListingItem[]>([]);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | ListingStatus>('ALL');
+  const [weeklyBoostUsed, setWeeklyBoostUsed] = useState(0);
+  const [resolvedPlanType, setResolvedPlanType] = useState('FREE');
+
+  const normalizePlanType = useCallback((raw?: string): string => {
+    const normalized = String(raw || 'FREE').trim().toUpperCase();
+    if (normalized.endsWith('_PLAN')) {
+      return normalized.replace('_PLAN', '');
+    }
+    return normalized;
+  }, []);
+
+  const planType = normalizePlanType(resolvedPlanType || user?.subscription?.plan || 'FREE');
+  const weeklyBoostLimit = planType === 'PREMIUM' ? 2 : planType === 'PRO' ? 1 : 0;
+  const canBoostByPlan = weeklyBoostLimit > 0;
+
+  const getWeekStorageKey = useCallback(() => {
+    const now = new Date();
+    const day = now.getDay();
+    const diffToMonday = (day + 6) % 7;
+    const monday = new Date(now);
+    monday.setDate(now.getDate() - diffToMonday);
+    const weekId = `${monday.getFullYear()}-${String(monday.getMonth() + 1).padStart(2, '0')}-${String(monday.getDate()).padStart(2, '0')}`;
+    return `boost_usage_${user?._id || 'unknown'}_${weekId}`;
+  }, [user?._id]);
 
   const loadListings = useCallback(async () => {
     try {
+      try {
+        const token = await AsyncStorage.getItem('access_token');
+        if (token) {
+          const subRes = await fetch(`${ENV.API_BASE_URL}/subscriptions/my-subscription`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const subJson = await subRes.json();
+          const planFromApi = subJson?.data?.subscription?.planType || subJson?.data?.plan?.name;
+          if (planFromApi) {
+            setResolvedPlanType(String(planFromApi));
+          }
+        }
+      } catch {
+        // Ignore subscription fetch errors and fallback to auth store plan.
+      }
+
+      const boostUsageRaw = await AsyncStorage.getItem(getWeekStorageKey());
+      setWeeklyBoostUsed(Number(boostUsageRaw || '0'));
+
       const res = await container().listingApiClient.getMyListings({ page: 1, limit: 200 });
       if (res.success) {
         setAllListings(Array.isArray(res.data) ? (res.data as SellerListingItem[]) : []);
@@ -92,7 +140,7 @@ export const SellerListingsScreen: React.FC<SellerListingsScreenProps> = ({
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [getWeekStorageKey]);
 
   useFocusEffect(
     useCallback(() => {
@@ -110,6 +158,10 @@ export const SellerListingsScreen: React.FC<SellerListingsScreenProps> = ({
       const bySearch = l.title?.toLowerCase().includes(search.toLowerCase());
       const byStatus = statusFilter === 'ALL' ? true : l.status === statusFilter;
       return bySearch && byStatus;
+    }).sort((a, b) => {
+      const boostDelta = (b.boostCount || 0) - (a.boostCount || 0);
+      if (boostDelta !== 0) return boostDelta;
+      return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
     });
   }, [allListings, search, statusFilter]);
 
@@ -141,13 +193,48 @@ export const SellerListingsScreen: React.FC<SellerListingsScreenProps> = ({
 
   const handleBoost = async (listing: SellerListingItem) => {
     try {
+      if (weeklyBoostLimit <= 0) {
+        Alert.alert('Gói của bạn không đáp ứng', 'Tính năng Boost chỉ khả dụng cho gói Pro/Premium.', [
+          { text: 'Đóng', style: 'cancel' },
+          { text: 'Nâng cấp gói', onPress: () => onManageSubscription?.() },
+        ]);
+        return;
+      }
+
+      if (weeklyBoostUsed >= weeklyBoostLimit) {
+        Toast.show({
+          type: 'info',
+          text1: 'Đã hết lượt boost tuần này',
+          text2: `Gói ${planType}: ${weeklyBoostLimit} lượt/tuần`,
+        });
+        return;
+      }
+
       const isBoosted = listing.boostedUntil && new Date(listing.boostedUntil) > new Date();
       if (isBoosted) return;
-      const res = await container().listingApiClient.boostListing({ listingId: listing._id, days: 7 });
+
+      // API docs: mỗi lần boost có hiệu lực 2 ngày.
+      const res = await container().listingApiClient.boostListing({ listingId: listing._id, days: 2 });
       if (res.success) {
         Toast.show({ type: 'success', text1: 'Boost thành công' });
+
+        const usageFromApi = res.data?.boostUsage?.used;
+        const nextUsed = usageFromApi ?? (weeklyBoostUsed + 1);
+        setWeeklyBoostUsed(nextUsed);
+        await AsyncStorage.setItem(getWeekStorageKey(), String(nextUsed));
+
+        const boostedUntil = res.data?.listing?.boostedUntil || new Date(Date.now() + 2 * 86400000).toISOString();
+        const nextBoostCount = res.data?.listing?.boostCount;
         setAllListings((prev) =>
-          prev.map((x) => (x._id === listing._id ? { ...x, boostedUntil: new Date(Date.now() + 7 * 86400000).toISOString() } : x))
+          prev.map((x) =>
+            x._id === listing._id
+              ? {
+                  ...x,
+                  boostedUntil,
+                  boostCount: nextBoostCount ?? ((x.boostCount || 0) + 1),
+                }
+              : x
+          )
         );
       } else {
         Toast.show({ type: 'error', text1: res.message || 'Boost thất bại' });
@@ -202,42 +289,56 @@ export const SellerListingsScreen: React.FC<SellerListingsScreenProps> = ({
               <View style={[styles.badge, { backgroundColor: st.bg }]}>
                 <Text style={[styles.badgeText, { color: st.text }]}>{item.status}</Text>
               </View>
-              <Text style={styles.views}>
-                <Eye size={12} color={COLORS.textLight} /> {item.views || 0}
-              </Text>
+              <View style={styles.viewsRow}>
+                <Eye size={12} color={COLORS.textLight} />
+                <Text style={styles.viewsText}>{item.views || 0}</Text>
+              </View>
+              <Text style={styles.boostCountText}>🚀 x{item.boostCount || 0}</Text>
               {boosted ? <Text style={styles.boosted}>🚀 Boosted</Text> : null}
             </View>
           </View>
         </TouchableOpacity>
 
         <View style={styles.actions}>
-          <TouchableOpacity style={styles.actionBtn} onPress={() => onEditListing?.(item)}>
-            <PencilLine size={14} color={COLORS.primary} />
-            <Text style={styles.actionText}>Sửa</Text>
-          </TouchableOpacity>
-
-          {item.status === 'DRAFT' ? (
-            <TouchableOpacity style={styles.actionBtn} onPress={() => handleSubmitApproval(item)}>
-              <Send size={14} color="#065F46" />
-              <Text style={[styles.actionText, { color: '#065F46' }]}>Gửi duyệt</Text>
-            </TouchableOpacity>
-          ) : null}
-
-          {item.status === 'PUBLISHED' ? (
-            <TouchableOpacity style={styles.actionBtn} onPress={() => handleBoost(item)} disabled={!!boosted}>
-              <Rocket size={14} color={boosted ? COLORS.textLight : '#B45309'} />
-              <Text style={[styles.actionText, { color: boosted ? COLORS.textLight : '#B45309' }]}>
-                {boosted ? 'Đã boost' : 'Boost'}
+          {['RESERVED', 'SOLD'].includes(item.status) ? (
+            <View style={styles.statusInfo}>
+              <Text style={styles.statusInfoText}>
+                {item.status === 'SOLD' ? '✓ Đã bán thành công' : '📦 Đang có đơn hàng'}
               </Text>
-            </TouchableOpacity>
-          ) : null}
+            </View>
+          ) : (
+            <>
+              <TouchableOpacity style={styles.actionBtn} onPress={() => onEditListing?.(item)}>
+                <PencilLine size={14} color={COLORS.primary} />
+                <Text style={styles.actionText}>Sửa</Text>
+              </TouchableOpacity>
 
-          {!['RESERVED', 'SOLD'].includes(item.status) ? (
-            <TouchableOpacity style={styles.actionBtn} onPress={() => handleDelete(item)}>
-              <Trash2 size={14} color={COLORS.error} />
-              <Text style={[styles.actionText, { color: COLORS.error }]}>Xóa</Text>
-            </TouchableOpacity>
-          ) : null}
+              {item.status === 'DRAFT' ? (
+                <TouchableOpacity style={styles.actionBtn} onPress={() => handleSubmitApproval(item)}>
+                  <Send size={14} color="#065F46" />
+                  <Text style={[styles.actionText, { color: '#065F46' }]}>Gửi duyệt</Text>
+                </TouchableOpacity>
+              ) : null}
+
+              {item.status === 'PUBLISHED' ? (
+                <TouchableOpacity
+                  style={styles.actionBtn}
+                  onPress={() => handleBoost(item)}
+                  disabled={!!boosted}
+                >
+                  <Rocket size={14} color={boosted || !canBoostByPlan ? COLORS.textLight : '#B45309'} />
+                  <Text style={[styles.actionText, { color: boosted || !canBoostByPlan ? COLORS.textLight : '#B45309' }]}> 
+                    {boosted ? 'Đã boost' : 'Boost'}
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
+
+              <TouchableOpacity style={styles.actionBtn} onPress={() => handleDelete(item)}>
+                <Trash2 size={14} color={COLORS.error} />
+                <Text style={[styles.actionText, { color: COLORS.error }]}>Xóa</Text>
+              </TouchableOpacity>
+            </>
+          )}
         </View>
       </View>
     );
@@ -402,7 +503,9 @@ const styles = StyleSheet.create({
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
   badge: { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3 },
   badgeText: { fontSize: 10, fontWeight: '700' },
-  views: { fontSize: 11, color: COLORS.textLight },
+  viewsRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  viewsText: { fontSize: 11, color: COLORS.textLight },
+  boostCountText: { fontSize: 11, color: '#B45309', fontWeight: '700' },
   boosted: { fontSize: 11, color: '#B45309', fontWeight: '600' },
   actions: {
     flexDirection: 'row',
@@ -416,6 +519,8 @@ const styles = StyleSheet.create({
   },
   actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   actionText: { fontSize: 12, color: COLORS.primary, fontWeight: '600' },
+  statusInfo: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  statusInfoText: { fontSize: 13, color: COLORS.textSecondary, fontWeight: '600' },
   emptyCard: {
     marginTop: 24,
     backgroundColor: COLORS.white,

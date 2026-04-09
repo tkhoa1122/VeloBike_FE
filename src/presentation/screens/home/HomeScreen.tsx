@@ -122,7 +122,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
   // Load data on mount
   useEffect(() => {
-    getFeaturedListings(6);
+    getFeaturedListings(10);
     getListings({ page: 1, limit: 8 });
     getWishlist({ page: 1, limit: 100 });
   }, [getFeaturedListings, getListings, getWishlist]);
@@ -130,7 +130,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     await Promise.all([
-      getFeaturedListings(6),
+      getFeaturedListings(10),
       getListings({ page: 1, limit: 8 }),
     ]);
     setRefreshing(false);
@@ -245,7 +245,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         {/* ── FEATURED ───────────────────────────────── */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Nổi bật</Text>
-          <TouchableOpacity>
+          <TouchableOpacity onPress={onSearch}>
             <Text style={styles.seeAll}>Xem tất cả</Text>
           </TouchableOpacity>
         </View>
@@ -304,7 +304,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         {/* ── RECOMMENDED ────────────────────────────── */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Gợi ý cho bạn</Text>
-          <TouchableOpacity>
+          <TouchableOpacity onPress={onSearch}>
             <Text style={styles.seeAll}>Xem tất cả</Text>
           </TouchableOpacity>
         </View>

@@ -32,6 +32,7 @@ import {
   Store,
   ShieldCheck,
   Crown,
+  Wallet,
 } from 'lucide-react-native';
 import {
   COLORS,
@@ -43,7 +44,6 @@ import {
   ICON_SIZES,
 } from '../../../config/theme';
 import { useAuthStore } from '../../viewmodels/AuthStore';
-import { useOrderStore } from '../../viewmodels/OrderStore';
 import { useWishlistStore } from '../../viewmodels/WishlistStore';
 import { useNotificationStore } from '../../viewmodels/NotificationStore';
 import { Button } from '../../components/common/Button';
@@ -61,6 +61,7 @@ interface ProfileScreenProps {
   onSellerDashboard?: () => void;
   onSubscriptionPlans?: () => void;
   onManageSubscription?: () => void;
+  onBuyerWallet?: () => void;
 }
 
 export const ProfileScreen: React.FC<ProfileScreenProps> = ({
@@ -71,17 +72,27 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   onNotifications,
   onSettings,
   onSellerDashboard,
+  onBuyerWallet,
   onSubscriptionPlans,
   onManageSubscription,
 }) => {
   const insets = useSafeAreaInsets();
   const { user, logout } = useAuthStore();
-  const { totalCount: orderCount } = useOrderStore();
   const { totalItems: wishlistCount } = useWishlistStore();
   const { unreadCount } = useNotificationStore();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const [upgradeInProgress, setUpgradeInProgress] = React.useState(false);
   const [subscriptionPlan, setSubscriptionPlan] = React.useState<string>('FREE');
+  const [profileOrderCount, setProfileOrderCount] = React.useState<number>(0);
+  const normalizedSubscriptionPlan = String(subscriptionPlan || 'FREE').toUpperCase();
+
+  const getSubscriptionBadgeLabel = useCallback((): string => {
+    if (normalizedSubscriptionPlan === 'FREE') return 'FREE';
+    if (normalizedSubscriptionPlan === 'BASIC') return 'BASIC';
+    if (normalizedSubscriptionPlan === 'PRO') return 'PRO';
+    if (normalizedSubscriptionPlan === 'PREMIUM') return 'PREMIUM';
+    return normalizedSubscriptionPlan;
+  }, [normalizedSubscriptionPlan]);
 
   useEffect(() => {
     Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }).start();
@@ -100,8 +111,36 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
       if (user?.role === 'SELLER') {
         loadSubscriptionPlan();
       }
+      loadOrderCount();
     }, [user?.role])
   );
+
+  useEffect(() => {
+    loadOrderCount();
+  }, [user?._id]);
+
+  const loadOrderCount = async () => {
+    try {
+      if (!user?._id) {
+        setProfileOrderCount(0);
+        return;
+      }
+
+      const res = await container().orderApiClient.getMyOrders({
+        page: 1,
+        limit: 1,
+        filters: { role: 'buyer' as any },
+      } as any);
+
+      if (res?.success) {
+        setProfileOrderCount(typeof res.count === 'number' ? res.count : Array.isArray(res.data) ? res.data.length : 0);
+      } else {
+        setProfileOrderCount(0);
+      }
+    } catch {
+      setProfileOrderCount(0);
+    }
+  };
 
   const loadSubscriptionPlan = async () => {
     try {
@@ -202,7 +241,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
 
   // Real stats from stores
   const stats = [
-    { label: 'Đã mua', value: typeof orderCount === 'number' ? orderCount.toString() : '0' },
+    { label: 'Đã mua', value: profileOrderCount.toString() },
     { label: 'Yêu thích', value: typeof wishlistCount === 'number' ? wishlistCount.toString() : '0' },
     { label: 'Đánh giá', value: typeof user?.reputation?.score === 'number' ? user.reputation.score.toFixed(1) : '0.0' },
   ];
@@ -255,6 +294,17 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
 
       return [
         {
+          title: 'Giao dịch',
+          items: [
+            {
+              icon: ShoppingBag,
+              label: 'Đơn hàng của tôi',
+              onPress: onOrders,
+              badge: profileOrderCount > 0 ? profileOrderCount.toString() : undefined,
+            },
+          ],
+        },
+        {
           title: 'Bán hàng',
           items: sellerItems,
         },
@@ -275,28 +325,31 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
     
     if (kycStatus === 'PENDING') {
       sellerSectionItems = [
-        { 
-          icon: ShieldCheck, 
-          label: 'Chờ xét duyệt KYC', 
-          onPress: () => Toast.show({ 
-            type: 'info', 
-            text1: 'Hồ sơ đang được xét duyệt',
-            text2: 'Bạn sẽ có thể đăng ký bán hàng khi KYC được phê duyệt.' 
-          }) 
+        {
+          icon: ShieldCheck,
+          label: 'Chờ xét duyệt KYC',
+          onPress: onKycVerification,
+          accent: true,
         },
       ];
     } else if (kycStatus === 'REJECTED') {
       sellerSectionItems = [
-        { 
-          icon: Shield, 
-          label: 'Xác minh lại KYC', 
+        {
+          icon: Shield,
+          label: 'Xác minh lại KYC',
           onPress: onKycVerification,
-          accent: true 
+          accent: true,
         },
       ];
-    } else {
+    } else if (kycStatus === 'VERIFIED') {
+      // KYC đã được duyệt nhưng chưa có role SELLER → cho phép đăng ký bán hàng
       sellerSectionItems = [
         { icon: Store, label: 'Đăng ký bán hàng', onPress: handleUpgradeToSeller, accent: true },
+      ];
+    } else {
+      // NOT_SUBMITTED hoặc chưa có kycStatus → đi đến KYC verification để nộp hồ sơ
+      sellerSectionItems = [
+        { icon: Store, label: 'Đăng ký bán hàng', onPress: onKycVerification, accent: true },
       ];
     }
 
@@ -304,7 +357,8 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
       {
         title: 'Giao dịch',
         items: [
-          { icon: ShoppingBag, label: 'Đơn hàng của tôi', onPress: onOrders, badge: orderCount > 0 ? orderCount?.toString() : undefined },
+          { icon: ShoppingBag, label: 'Đơn hàng của tôi', onPress: onOrders, badge: profileOrderCount > 0 ? profileOrderCount.toString() : undefined },
+          { icon: Wallet, label: 'Ví tiền', onPress: onBuyerWallet },
         ],
       },
       {
@@ -349,16 +403,16 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
               <View
                 style={[
                   styles.subscriptionBadge,
-                  subscriptionPlan === 'FREE' ? styles.subscriptionBadgeFree : styles.subscriptionBadgePremium,
+                  normalizedSubscriptionPlan === 'FREE' ? styles.subscriptionBadgeFree : styles.subscriptionBadgePremium,
                 ]}
               >
                 <Text
                   style={[
                     styles.subscriptionBadgeText,
-                    subscriptionPlan === 'FREE' ? styles.subscriptionBadgeTextFree : styles.subscriptionBadgeTextPremium,
+                    normalizedSubscriptionPlan === 'FREE' ? styles.subscriptionBadgeTextFree : styles.subscriptionBadgeTextPremium,
                   ]}
                 >
-                  {subscriptionPlan === 'FREE' ? 'FREE' : 'PREMIUM'}
+                  {getSubscriptionBadgeLabel()}
                 </Text>
               </View>
             )}

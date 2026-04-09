@@ -7,6 +7,10 @@ import { UserModel } from '../models/UserModel';
 export class AuthRepositoryImpl implements AuthRepository {
   constructor(private authApiClient: AuthApiClient) {}
 
+  private extractProfileUser(response: { user?: UserModel; data?: UserModel }): UserModel | null {
+    return response?.user ?? response?.data ?? null;
+  }
+
   async register(data: RegisterData): Promise<ApiResponse> {
     try {
       const response = await this.authApiClient.register(data);
@@ -164,11 +168,12 @@ export class AuthRepositoryImpl implements AuthRepository {
   async getCurrentUser(): Promise<User | null> {
     try {
       const response = await this.authApiClient.getCurrentUser();
-      
-      if (response.success && response.user) {
-        return this.mapUserModelToEntity(response.user);
+
+      const profileUser = this.extractProfileUser(response as any);
+      if (response.success && profileUser) {
+        return this.mapUserModelToEntity(profileUser);
       }
-      
+
       return null;
     } catch (error) {
       return null;
@@ -178,19 +183,20 @@ export class AuthRepositoryImpl implements AuthRepository {
   async updateProfile(data: UpdateProfileData): Promise<ApiResponse<User>> {
     try {
       const response = await this.authApiClient.updateProfile(data);
-      
-      if (response.success) {
-        const user = this.mapUserModelToEntity(response.user);
+
+      const profileUser = this.extractProfileUser(response as any);
+      if (response.success && profileUser) {
+        const user = this.mapUserModelToEntity(profileUser);
         return {
           success: true,
           data: user,
           message: 'Profile updated successfully'
         };
       }
-      
+
       return {
         success: false,
-        message: 'Profile update failed'
+        message: response.message || 'Profile update failed'
       };
     } catch (error) {
       return {

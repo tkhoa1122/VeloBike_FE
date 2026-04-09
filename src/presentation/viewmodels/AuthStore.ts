@@ -52,6 +52,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           loadingState: 'success',
           error: null 
         });
+        // Fetch full profile after login to ensure all fields (address, bodyMeasurements, etc.) are loaded
+        try {
+          const fullUser = await useCase.getCurrentUser().execute();
+          if (fullUser) {
+            set({ user: fullUser });
+          }
+        } catch {
+          // Non-critical: keep login user data if full profile fetch fails
+        }
         return true;
       } else {
         set({ 
@@ -98,6 +107,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           isAuthenticated: true,
           error: null 
         });
+        // Fetch full profile after login to ensure all fields are loaded
+        try {
+          const fullUser = await useCase.getCurrentUser().execute();
+          if (fullUser) {
+            set({ user: fullUser });
+          }
+        } catch {
+          // Non-critical: keep login user data if full profile fetch fails
+        }
         return true;
       } else {
         set({ 
@@ -239,6 +257,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           error: null 
         });
       } else {
+        if (silent && get().user) {
+          set({
+            loadingState: 'idle',
+            error: null,
+          });
+          return;
+        }
+
         set({ 
           user: null,
           isAuthenticated: false,
@@ -247,6 +273,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         });
       }
     } catch (error) {
+      if (silent && get().user) {
+        set({
+          loadingState: 'idle',
+          error: null,
+        });
+        return;
+      }
+
       set({ 
         user: null,
         isAuthenticated: false,

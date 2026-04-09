@@ -2,9 +2,20 @@ import { BaseApiClient } from './BaseApiClient';
 
 /** Phản hồi tạo review — BE trả document Review (reviewerId, revieweeId, …) */
 export interface ReviewCreateResponse {
-  success: boolean;
+  success?: boolean;
   message?: string;
   data?: Record<string, unknown>;
+  review?: Record<string, unknown>;
+  error?: string;
+}
+
+export interface ReviewCheckResponse {
+  success?: boolean;
+  reviewed?: boolean;
+  data?: {
+    reviewed?: boolean;
+    isReviewed?: boolean;
+  } | boolean;
 }
 
 /** GET /reviews/:userId — BE: { success, data: Review[], pagination } */
@@ -68,7 +79,7 @@ export class ReviewApiClient extends BaseApiClient {
   }
 
   /** Buyer kiểm tra đã review đơn chưa */
-  async checkReviewed(orderId: string): Promise<{ success: boolean; reviewed: boolean }> {
+  async checkReviewed(orderId: string): Promise<ReviewCheckResponse> {
     return this.get(`/reviews/check/${orderId}`);
   }
 

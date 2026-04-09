@@ -13,6 +13,7 @@ import {
   Animated,
   StatusBar,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowLeft, Camera, UserCircle } from 'lucide-react-native';
@@ -27,6 +28,8 @@ import {
 import { Input } from '../../components/common/Input';
 import { Button } from '../../components/common/Button';
 import { useAuthStore } from '../../viewmodels/AuthStore';
+import { useImagePicker } from '../../hooks/useImagePicker';
+import { container } from '../../../di/Container';
 
 interface EditProfileScreenProps {
   onBack?: () => void;
@@ -38,6 +41,9 @@ export const EditProfileScreen: React.FC<EditProfileScreenProps> = ({ onBack, on
   const { user } = useAuthStore();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const [saving, setSaving] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [avatarPreview, setAvatarPreview] = useState<string | undefined>(user?.avatar);
+  const { showImagePicker } = useImagePicker({ maxFiles: 1, quality: 0.8, maxWidth: 1024, maxHeight: 1024 });
 
   const [fullName, setFullName] = useState(user?.fullName || '');
   const [phone, setPhone] = useState(user?.phone || '');
@@ -48,9 +54,60 @@ export const EditProfileScreen: React.FC<EditProfileScreenProps> = ({ onBack, on
   const [inseam, setInseam] = useState(user?.bodyMeasurements?.inseam?.toString() || '');
   const [weight, setWeight] = useState(user?.bodyMeasurements?.weight?.toString() || '');
 
+  // Track if form has been manually edited by user to avoid overwriting their input
+  const [formInitialized, setFormInitialized] = useState(false);
+
   useEffect(() => {
     Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
   }, [fadeAnim]);
+
+  useEffect(() => {
+    setAvatarPreview(user?.avatar);
+  }, [user?.avatar]);
+
+  // Sync form fields when user data loads (e.g. after full profile fetch on login)
+  useEffect(() => {
+    if (user && !formInitialized) {
+      setFullName(user.fullName || '');
+      setPhone(user.phone || '');
+      setStreet(user.address?.street || '');
+      setDistrict(user.address?.district || '');
+      setCity(user.address?.city || '');
+      setHeight(user.bodyMeasurements?.height?.toString() || '');
+      setInseam(user.bodyMeasurements?.inseam?.toString() || '');
+      setWeight(user.bodyMeasurements?.weight?.toString() || '');
+      setFormInitialized(true);
+    }
+  }, [user, formInitialized]);
+
+  const handleChangeAvatar = useCallback(async () => {
+    try {
+      const images = await showImagePicker(false);
+      if (!images.length) return;
+
+      const picked = images[0];
+      setAvatarPreview(picked.uri);
+      setUploadingAvatar(true);
+
+      const result = await container().authApiClient.uploadAvatar({
+        uri: picked.uri,
+        name: picked.name,
+        type: picked.type,
+      });
+
+      if (!result.success) {
+        throw new Error(result.message || 'Upload ảnh đại diện thất bại');
+      }
+
+      await useAuthStore.getState().getCurrentUser(false, true);
+      Alert.alert('Thành công', 'Đã cập nhật ảnh đại diện');
+    } catch (err) {
+      setAvatarPreview(user?.avatar);
+      Alert.alert('Lỗi', err instanceof Error ? err.message : 'Không thể tải ảnh đại diện lên');
+    } finally {
+      setUploadingAvatar(false);
+    }
+  }, [showImagePicker, user?.avatar]);
 
   const handleSave = useCallback(async () => {
     if (!fullName.trim()) {
@@ -60,7 +117,7 @@ export const EditProfileScreen: React.FC<EditProfileScreenProps> = ({ onBack, on
     setSaving(true);
     try {
       const { updateProfile } = useAuthStore.getState();
-      await updateProfile({
+      const ok = await updateProfile({
         fullName: fullName.trim(),
         phone: phone.trim() || undefined,
         address: (street || district || city) ? {
@@ -75,7 +132,13 @@ export const EditProfileScreen: React.FC<EditProfileScreenProps> = ({ onBack, on
           weight: weight ? Number(weight) : undefined,
         } : undefined,
       });
-      Alert.alert('Thành công', 'Đã cập nhật thông tin hồ sơ!', [{ text: 'OK', onPress: onSave }]);
+
+      if (ok) {
+        Alert.alert('Thành công', 'Đã cập nhật thông tin hồ sơ!', [{ text: 'OK', onPress: onSave }]);
+      } else {
+        const err = useAuthStore.getState().error;
+        Alert.alert('Lỗi', err || 'Không thể cập nhật hồ sơ. Vui lòng thử lại.');
+      }
     } catch (err) {
       Alert.alert('Lỗi', 'Không thể cập nhật hồ sơ. Vui lòng thử lại.');
     } finally {
@@ -100,15 +163,19 @@ export const EditProfileScreen: React.FC<EditProfileScreenProps> = ({ onBack, on
         {/* Avatar */}
         <View style={styles.avatarSection}>
           <View style={styles.avatarWrap}>
-            {user?.avatar ? (
-              <Image source={{ uri: user.avatar }} style={styles.avatar} />
+            {avatarPreview ? (
+              <Image source={{ uri: avatarPreview }} style={styles.avatar} />
             ) : (
               <View style={styles.avatarPlaceholder}>
                 <UserCircle size={50} color={COLORS.primaryLight} strokeWidth={1} />
               </View>
             )}
-            <TouchableOpacity style={styles.cameraBtn}>
-              <Camera size={16} color={COLORS.white} />
+            <TouchableOpacity style={styles.cameraBtn} onPress={handleChangeAvatar} disabled={uploadingAvatar}>
+              {uploadingAvatar ? (
+                <ActivityIndicator size="small" color={COLORS.white} />
+              ) : (
+                <Camera size={16} color={COLORS.white} />
+              )}
             </TouchableOpacity>
           </View>
           <Text style={styles.avatarHint}>Nhấn để đổi ảnh đại diện</Text>

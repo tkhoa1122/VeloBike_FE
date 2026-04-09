@@ -1,13 +1,14 @@
 import React, { useMemo, useState } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator, Image, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, Camera, ShieldCheck } from 'lucide-react-native';
+import { ArrowLeft, Camera, ShieldCheck, CircleCheck } from 'lucide-react-native';
 import tw from 'twrnc';
 import Toast from 'react-native-toast-message';
 import { COLORS } from '../../../config/theme';
 import { PickedImage, useImagePicker } from '../../hooks/useImagePicker';
 import { container } from '../../../di/Container';
 import { useAuthStore } from '../../viewmodels/AuthStore';
+import { User } from '../../../domain/entities/User';
 
 interface KycSubmitScreenProps {
   onBack?: () => void;
@@ -18,6 +19,12 @@ interface KycImageFieldProps {
   value?: string;
   loading: boolean;
   onPick: () => Promise<void>;
+}
+
+interface KycSubmitResultState {
+  title: string;
+  message: string;
+  ctaText: string;
 }
 
 const KycImageField: React.FC<KycImageFieldProps> = ({ label, value, loading, onPick }) => {
@@ -54,20 +61,20 @@ export default function KycSubmitScreen({ onBack }: KycSubmitScreenProps) {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [uploadingField, setUploadingField] = useState<'idCardFront' | 'selfie' | null>(null);
+  const [submitResult, setSubmitResult] = useState<KycSubmitResultState | null>(null);
 
-  const { pickFromCamera, pickFromLibrary } = useImagePicker({ maxFiles: 1 });
+  const { showImagePicker } = useImagePicker({ maxFiles: 1 });
 
   const canSubmit = useMemo(() => !!idCardFront && !!selfie && !submitting, [idCardFront, selfie, submitting]);
 
   const validateImage = (img: PickedImage, label: string): string | null => {
-    const allowed = ['image/jpeg', 'image/jpg', 'image/png'];
     const mime = (img.type || '').toLowerCase();
-    if (!allowed.includes(mime)) {
-      return `${label} phải là ảnh JPG hoặc PNG.`;
+    if (!mime.startsWith('image/')) {
+      return `${label} phải là file ảnh hợp lệ.`;
     }
 
-    if ((img.width ?? 0) < 600 || (img.height ?? 0) < 600) {
-      return `${label} quá nhỏ, vui lòng chọn ảnh rõ nét hơn.`;
+    if (!img.uri) {
+      return `${label} không hợp lệ, vui lòng chọn lại ảnh.`;
     }
 
     return null;
@@ -84,13 +91,73 @@ export default function KycSubmitScreen({ onBack }: KycSubmitScreenProps) {
     return raw || 'Vui lòng thử lại sau.';
   };
 
+  const mapApiUserToDomain = (raw: any): User => {
+    return {
+      _id: raw?._id ?? raw?.id ?? '',
+      email: raw?.email ?? '',
+      fullName: raw?.fullName ?? '',
+      avatar: raw?.avatar,
+      phone: raw?.phone,
+      role: (raw?.role ?? 'BUYER') as any,
+      emailVerified: !!raw?.emailVerified,
+      kycStatus: (raw?.kycStatus ?? 'not_submitted') as any,
+      address: raw?.address,
+      bodyMeasurements: raw?.bodyMeasurements,
+      wallet: raw?.wallet,
+      reputation: raw?.reputation,
+      subscription: raw?.subscription
+        ? {
+            plan: raw.subscription.plan,
+            expiresAt: new Date(raw.subscription.expiresAt),
+            isActive: !!raw.subscription.isActive,
+          }
+        : undefined,
+      googleId: raw?.googleId,
+      facebookId: raw?.facebookId,
+      createdAt: raw?.createdAt ? new Date(raw.createdAt) : new Date(),
+      updatedAt: raw?.updatedAt ? new Date(raw.updatedAt) : new Date(),
+    };
+  };
+
+  const refreshCurrentUserState = async (): Promise<User | null> => {
+    const me = await container().authApiClient.getCurrentUser();
+    const rawUser = (me as any)?.user ?? (me as any)?.data;
+
+    if (!me?.success || !rawUser) {
+      return null;
+    }
+
+    const mapped = mapApiUserToDomain(rawUser);
+    useAuthStore.getState().upgradeToSellerSuccess(mapped);
+    return mapped;
+  };
+
+  const handleResultAction = async () => {
+    setSubmitting(true);
+    try {
+      let user = await refreshCurrentUserState();
+      const normalizedKyc = String(user?.kycStatus || '').toUpperCase();
+      const isApproved = normalizedKyc === 'VERIFIED' || normalizedKyc === 'APPROVED';
+
+      if (isApproved && String(user?.role || '').toUpperCase() !== 'SELLER') {
+        await container().authApiClient.upgradeToSeller();
+        user = await refreshCurrentUserState();
+      }
+
+      await useAuthStore.getState().getCurrentUser(true, true);
+    } finally {
+      setSubmitting(false);
+      onBack?.();
+    }
+  };
+
   const pickAndUpload = async (field: 'idCardFront' | 'selfie') => {
     try {
       setUploadingField(field);
       setSubmitError(null); // Clear previous errors when starting new upload
       
-      // Both fields can use library (supports emulator testing)
-      const images = await pickFromLibrary(false);
+      // Hiển thị modal nguồn ảnh (Camera/Thư viện) để UX nhất quán.
+      const images = await showImagePicker(false);
       
       if (!images.length) {
         setUploadingField(null);
@@ -185,92 +252,34 @@ export default function KycSubmitScreen({ onBack }: KycSubmitScreenProps) {
         return;
       }
 
-      // Update AuthStore KYC status  
+      // Keep local state consistent while waiting BE status sync.
       useAuthStore.getState().submitKycSuccess();
 
-      // Auto-upgrade to seller after KYC (success or already verified)
-      const performUpgrade = async () => {
-        try {
-          console.log('🔄 Auto-upgrading to seller after KYC...');
-          const upgradeResult = await container().authApiClient.upgradeToSeller();
-          console.log('✅ Upgrade response:', upgradeResult);
-          
-          // Refresh user immediately to get new role + wait a bit for DB
-          console.log('📥 Fetching fresh user data...');
-          const getCurrentUser = useAuthStore.getState().getCurrentUser as any;
-          await getCurrentUser(false, true);
-          
-          // Add small delay to ensure state propagation
-          await new Promise(resolve => setTimeout(() => resolve(undefined), 300));
+      let user = await refreshCurrentUserState();
+      const normalizedKyc = String(user?.kycStatus || '').toUpperCase();
+      const kycApproved = isAlreadyVerified || normalizedKyc === 'VERIFIED' || normalizedKyc === 'APPROVED';
 
-          // Check if role actually updated
-          const updatedUser = useAuthStore.getState().user;
-          console.log('👤 Updated user:', { role: updatedUser?.role, email: updatedUser?.email });
-          const isNowSeller = updatedUser?.role === 'SELLER';
-          
-          if (isNowSeller) {
-            console.log('✅ Role upgrade successful!');
-            Toast.show({
-              type: 'success',
-              text1: 'Lên cấp thành công',
-              text2: 'Bạn đã trở thành người bán hàng.',
-            });
-            onBack?.();
-          } else {
-            // Role not updated - backend might have failed
-            console.warn('⚠️ Role not updated after upgrade call. Current role:', updatedUser?.role);
-            Toast.show({
-              type: 'success',
-              text1: 'KYC đã được xét duyệt',
-              text2: 'Vui lòng quay lại để hoàn tất đăng ký bán hàng.',
-            });
-            onBack?.();
-          }
-        } catch (err) {
-          console.error('⚠️ Upgrade error:', err);
-          // Even if upgrade fails, try to refresh
-          const getCurrentUser = useAuthStore.getState().getCurrentUser as any;
-          await getCurrentUser(false, true);
-          await new Promise(resolve => setTimeout(() => resolve(undefined), 300));
-          
-          // Check if user is seller despite error
-          const currentUser = useAuthStore.getState().user;
-          console.log('💾 Current user after error:', { role: currentUser?.role });
-          if (currentUser?.role === 'SELLER') {
-            console.log('✅ Despite error, user is now SELLER!');
-            Toast.show({
-              type: 'success',
-              text1: 'Lên cấp thành công',
-              text2: 'Bạn đã trở thành người bán hàng.',
-            });
-          } else {
-            // Still buyer - don't show error, retry message
-            Toast.show({
-              type: 'info',
-              text1: 'KYC đã được xét duyệt',
-              text2: 'Vui lòng quay lại để hoàn tất.',
-            });
-          }
-          onBack?.();
-        }
-      };
+      if (kycApproved && String(user?.role || '').toUpperCase() !== 'SELLER') {
+        await container().authApiClient.upgradeToSeller();
+        user = await refreshCurrentUserState();
+      }
 
-      // If already verified or submit successful, upgrade to seller
-      if (isAlreadyVerified || result.success) {
-        setSubmitting(false);
-        await performUpgrade();
+      const isSellerNow = String(user?.role || '').toUpperCase() === 'SELLER';
+
+      if (isSellerNow) {
+        setSubmitResult({
+          title: 'Xác minh thành công',
+          message: 'Tài khoản của bạn đã được nâng cấp thành người bán. Nhấn nút bên dưới để cập nhật trạng thái hồ sơ.',
+          ctaText: 'Cập nhật trạng thái',
+        });
         return;
       }
 
-      // For new KYC submissions (not already verified), show pending status
-      Toast.show({
-        type: 'success',
-        text1: 'Nộp KYC thành công',
-        text2: 'Hồ sơ đã được gửi và đang chờ xét duyệt.',
+      setSubmitResult({
+        title: 'Đã gửi hồ sơ xác minh',
+        message: 'Hồ sơ đã được gửi thành công. Nhấn nút bên dưới để cập nhật trạng thái mới nhất từ hệ thống.',
+        ctaText: 'Quay về hồ sơ',
       });
-      
-      setSubmitError(null);
-      onBack?.();
     } catch (error) {
       const rawMessage = error instanceof Error ? error.message : 'Vui lòng thử lại sau';
       const friendly = getKycFriendlyError(rawMessage);
@@ -285,6 +294,32 @@ export default function KycSubmitScreen({ onBack }: KycSubmitScreenProps) {
       setSubmitting(false);
     }
   };
+
+  if (submitResult) {
+    return (
+      <SafeAreaView style={tw`flex-1 bg-white`}>
+        <View style={tw`flex-1 px-6 items-center justify-center`}>
+          <View style={tw`w-16 h-16 rounded-full items-center justify-center mb-4`}>
+            <CircleCheck size={56} color={COLORS.success} />
+          </View>
+          <Text style={tw`text-2xl font-bold text-gray-900 text-center`}>{submitResult.title}</Text>
+          <Text style={tw`text-base text-gray-600 text-center mt-3`}>{submitResult.message}</Text>
+
+          <TouchableOpacity
+            style={[tw`rounded-xl py-4 px-6 items-center mt-8 w-full`, { backgroundColor: COLORS.primary }]}
+            onPress={handleResultAction}
+            disabled={submitting}
+          >
+            {submitting ? (
+              <ActivityIndicator color="white" />
+            ) : (
+              <Text style={tw`text-white text-base font-bold`}>{submitResult.ctaText}</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={tw`flex-1 bg-white`}>

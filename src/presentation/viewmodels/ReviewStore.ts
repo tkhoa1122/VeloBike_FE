@@ -45,9 +45,9 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
       const repo = container().reviewRepository;
       const result = await repo.createReview(data);
 
-      if (result.success && result.data) {
+      if (result.success) {
         set({
-          currentReview: result.data,
+          currentReview: result.data ?? null,
           loadingState: 'success',
         });
         // Refresh my reviews list

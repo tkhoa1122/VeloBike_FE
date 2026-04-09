@@ -12,10 +12,9 @@ import {
   Animated,
   StatusBar,
   ActivityIndicator,
-  SafeAreaView,
 } from 'react-native';
 import tw from 'twrnc';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Plus,
   TrendingUp,
@@ -48,6 +47,7 @@ interface SellerStats {
     media: { thumbnails: string[] };
     pricing: { amount: number };
     views: number;
+    boostCount: number;
     status: string;
   }>;
   recentOrders: Array<{
@@ -69,6 +69,8 @@ interface SellerDashboardScreenProps {
   onUpgradeSubscription?: () => void;
   /** Đánh giá nhận được (GET /reviews/my-reviews) */
   onViewReviews?: () => void;
+  /** Navigate to order detail */
+  onOrderPress?: (orderId: string) => void;
 }
 
 export const SellerDashboardScreen: React.FC<SellerDashboardScreenProps> = ({
@@ -79,6 +81,7 @@ export const SellerDashboardScreen: React.FC<SellerDashboardScreenProps> = ({
   onOpenListingDetail,
   onUpgradeSubscription,
   onViewReviews,
+  onOrderPress,
 }) => {
   const insets = useSafeAreaInsets();
   const { user } = useAuthStore();
@@ -123,8 +126,11 @@ export const SellerDashboardScreen: React.FC<SellerDashboardScreenProps> = ({
       const totalViews = listings.reduce((sum, l) => sum + (l.views || 0), 0);
       const recentListings = [...listings]
         .sort(
-          (a, b) =>
-            new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+          (a, b) => {
+            const boostDelta = (b.boostCount || 0) - (a.boostCount || 0);
+            if (boostDelta !== 0) return boostDelta;
+            return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+          }
         )
         .slice(0, 5)
         .map((l) => ({
@@ -133,6 +139,7 @@ export const SellerDashboardScreen: React.FC<SellerDashboardScreenProps> = ({
           media: { thumbnails: l.media?.thumbnails || [] },
           pricing: { amount: l.pricing?.amount || 0 },
           views: l.views || 0,
+          boostCount: l.boostCount || 0,
           status: l.status,
         }));
 
@@ -161,9 +168,23 @@ export const SellerDashboardScreen: React.FC<SellerDashboardScreenProps> = ({
       const pendingOrders = orders.filter((o) => pendingStatuses.has(o.status)).length;
 
       const totalSales = orders.filter((o) => ['COMPLETED', 'DELIVERED'].includes(o.status)).length;
+      const getSellerRevenueFromOrder = (o: any): number => {
+        const payout = Number(o?.financials?.sellerPayout?.amount ?? 0);
+        if (Number.isFinite(payout) && payout > 0) return payout;
+
+        const itemPrice = Number(o?.financials?.itemPrice ?? 0);
+        if (Number.isFinite(itemPrice) && itemPrice > 0) return itemPrice;
+
+        const total = Number(o?.financials?.totalAmount ?? 0);
+        const shipping = Number(o?.financials?.shippingFee ?? 0);
+        const platformFee = Number(o?.financials?.platformFee ?? 0);
+        const derived = total - shipping - platformFee;
+        return Number.isFinite(derived) && derived > 0 ? derived : total;
+      };
+
       const totalRevenue = orders
-        .filter((o) => o.status === 'COMPLETED')
-        .reduce((sum, o) => sum + (o.financials?.totalAmount || 0), 0);
+        .filter((o) => ['COMPLETED', 'DELIVERED'].includes(o.status))
+        .reduce((sum, o) => sum + getSellerRevenueFromOrder(o), 0);
 
       const recentOrders = orders.slice(0, 5).map((o) => ({
         _id: o._id,
@@ -376,6 +397,7 @@ export const SellerDashboardScreen: React.FC<SellerDashboardScreenProps> = ({
                 image={listing.media.thumbnails[0] || 'https://via.placeholder.com/200'}
                 price={listing.pricing.amount}
                 views={listing.views}
+                boostCount={listing.boostCount}
                 status={listing.status as any}
                 onPress={() => onOpenListingDetail?.(listing._id)}
               />
@@ -411,13 +433,7 @@ export const SellerDashboardScreen: React.FC<SellerDashboardScreenProps> = ({
                 amount={order.totalAmount}
                 status={order.status as any}
                 createdAt={order.createdAt}
-                onPress={() => {
-                  Toast.show({
-                    type: 'info',
-                    text1: 'Chi tiết đơn hàng',
-                    text2: `Đơn: ${order._id.slice(-6)}`,
-                  });
-                }}
+                onPress={() => onOrderPress?.(order._id)}
               />
             ))
           ) : (
